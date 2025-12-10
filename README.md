@@ -313,7 +313,7 @@ Regular security updates
          │                        │  - plant-       │                      │
          │      SUBSCRIBE         │    pump-commands│              User Action
          └────────────────────────┘                 │            (Click "Water Now")
-                    Pump Commands   └─────────────────┘                      │
+                    Pump Commands └─────────────────┘                      │
                                                                              ▼
                                                                    ┌─────────────────┐
                                                                    │    PUBNUB       │
