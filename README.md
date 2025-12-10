@@ -247,28 +247,24 @@ python3 tests/test_pubnub.py
 ### 📊 Project Structure
 ```
 smart-plant-irrigation/
+├── docs/
+│   ├── hardware_setup.md
+│   └── wiring_diagrams/  #### Fritzing diagrams
 ├── iot-device/           #### Raspberry Pi code
 │   ├── main.py          #### Main control logic
 │   ├── sensor.py        #### Soil sensor reading
 │   ├── pump.py          #### Pump control logic
 │   ├── pubnub_client.py #### PubNub communication
 │   └── config.json      #### Configuration (DO NOT COMMIT)
+├── tests/               #### Hardware/software tests
 ├── web-dashboard/       #### React dashboard
 │   ├── src/
 │   │   ├── components/
 │   │   ├── services/
 │   │   └── App.js
-│   ├── package.json
-│   └── README.md
-├── docs/
-│   ├── hardware_setup.md
-│   └── wiring_diagrams/
-├── schematics/          #### Fritzing diagrams
-├── tests/               #### Hardware/software tests
+│   └── package.json
 ├── .gitignore
-├── LICENSE
-├── README.md
-└── requirements.txt
+└── README.md
 ```
 
 ### 🔒 Security Features
@@ -326,20 +322,6 @@ Regular security updates
                                                                    │    3000}        │
                                                                    └─────────────────┘
 
-graph LR
-    A[🌱 Soil Sensor] --> B[🖥️ Raspberry Pi]
-    B --> C[📡 PubNub Cloud]
-    C --> D[💻 Web Dashboard]
-    D --> E[👤 User Action]
-    E --> C
-    C --> B
-    B --> F[💧 Water Pump]
-    
-    style A fill:#90EE90
-    style B fill:#FFB6C1
-    style C fill:#ADD8E6
-    style D fill:#FFD700
-    style F fill:#87CEEB
   ```                                                                 
 
 
