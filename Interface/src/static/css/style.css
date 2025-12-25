@@ -1,0 +1,73 @@
+/* Additional custom styles */
+
+/* Smooth transitions */
+* {
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Custom button styles */
+.btn-gradient {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    border: none;
+    color: white;
+}
+
+.btn-gradient:hover {
+    background: linear-gradient(135deg, #2575fc 0%, #6a11cb 100%);
+    color: white;
+}
+
+/* Card hover effects */
+.hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Custom scrollbar for specific elements */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #28a745 rgba(255, 255, 255, 0.1);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #28a745;
+    border-radius: 3px;
+}
+
+/* Loading animations */
+.spinner-grow-custom {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Text gradient effects */
+.text-gradient {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Pulse animation for alerts */
+@keyframes gentle-pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.8; }
+    100% { opacity: 1; }
+}
+
+.pulse-gentle {
+    animation: gentle-pulse 2s infinite;
+}
