@@ -1,0 +1,129 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="min-h-screen bg-[#0b0e14] text-white p-8">
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-4xl font-bold">{{ plant.name }}</h1>
+            <p class="text-gray-400 text-lg">{{ plant.location }}</p>
+        </div>
+        <a href="{{ url_for('dashboard') }}" class="text-gray-400 hover:text-white">
+            <i class="fas fa-times text-2xl"></i>
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+        <div class="lg:col-span-4 space-y-8">
+            <div class="rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
+                <img src="{{ url_for('static', filename='uploads/' + (plant.image_url or 'default.jpg')) }}" 
+                     class="w-full h-[500px] object-cover">
+            </div>
+
+            <div class="bg-[#161b22] border border-white/10 rounded-2xl p-6">
+                <h3 class="text-xl font-bold mb-4">Current Status</h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400"><i class="fas fa-tint mr-2"></i> Soil Moisture</span>
+                        <span class="bg-blue-900/40 text-blue-400 px-3 py-1 rounded-full text-sm">
+                            {{ last_reading.moisture_level if last_reading else 'N/A' }}%
+                        </span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400"><i class="fas fa-calendar mr-2"></i> Last Watered</span>
+                        <span>{{ last_reading.recorded_at.strftime('%b %d, %Y') if last_reading else 'Never' }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400"><i class="fas fa-sun mr-2"></i> Environment</span>
+                        <span class="text-right text-sm italic">{{ plant.environment_desc }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-8">
+            <div class="bg-[#1c122d]/40 border border-purple-500/20 rounded-2xl p-8 mb-6">
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-12 h-12 bg-purple-600/20 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-magic text-purple-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-purple-100">Personalized Care Advice</h2>
+                        <p class="text-purple-300/60 text-sm">Get AI-powered tips to help your plant thrive.</p>
+                    </div>
+                </div>
+
+                <div class="space-y-2">
+                    {% set sections = [
+                        ('Watering Schedule', 'fa-droplet'),
+                        ('Lighting Advice', 'fa-lightbulb'),
+                        ('Fertilization Advice', 'fa-flask'),
+                        ('Other Care Tips', 'fa-leaf')
+                    ] %}
+                    {% for title, icon in sections %}
+                    <div class="border-b border-white/5 last:border-0">
+                        <button onclick="toggleAccordion(this)" class="w-full py-5 flex justify-between items-center text-left hover:text-purple-400 transition">
+                            <span class="font-semibold flex items-center gap-3">
+                                <i class="fas {{ icon }} text-sm opacity-50"></i> {{ title }}
+                            </span>
+                            <i class="fas fa-chevron-down text-xs transition-transform duration-300"></i>
+                        </button>
+                        <div class="max-h-0 overflow-hidden transition-all duration-300 opacity-0 bg-white/5 rounded-xl">
+                            <p class="p-6 text-gray-300 text-sm leading-relaxed" id="ai-content-{{ loop.index }}">
+                                Loading personalized data...
+                            </p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <button onclick="regenerateAI()" class="w-full mt-8 py-3 border border-white/10 rounded-xl text-sm font-medium hover:bg-white/5 transition flex items-center justify-center gap-2">
+                    <i class="fas fa-sync-alt text-xs"></i> Regenerate
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleAccordion(btn) {
+    const panel = btn.nextElementSibling;
+    const icon = btn.querySelector('.fa-chevron-down');
+    
+    if (panel.style.maxHeight) {
+        panel.style.maxHeight = null;
+        panel.style.opacity = "0";
+        icon.style.transform = "rotate(0deg)";
+    } else {
+        panel.style.maxHeight = panel.scrollHeight + "px";
+        panel.style.opacity = "1";
+        icon.style.transform = "rotate(180deg)";
+    }
+}
+
+async function loadAITips() {
+    const aiContainer = document.querySelectorAll('[id^="ai-content-"]');
+    aiContainer.forEach(c => c.innerText = "Consulting Gemini AI...");
+
+    try {
+        const response = await fetch('/api/ai-tips/{{ plant.id }}');
+        const data = await response.json();
+
+        if (data.error) throw new Error(data.error);
+
+        document.getElementById('ai-content-1').innerText = data.watering;
+        document.getElementById('ai-content-2').innerText = data.lighting;
+        document.getElementById('ai-content-3').innerText = data.fertilization;
+        document.getElementById('ai-content-4').innerText = data.other;
+    } catch (err) {
+        console.error(err);
+        aiContainer.forEach(c => c.innerText = "Error loading tips. Please check your API key.");
+    }
+}
+
+// Define the missing function
+function regenerateAI() {
+    loadAITips();
+}
+
+// Run on page load
+window.onload = loadAITips;
+</script>{% endblock %}
