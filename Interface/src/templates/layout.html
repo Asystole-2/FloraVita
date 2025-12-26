@@ -3,42 +3,44 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
-    <title>AquaFlow | Smart Irrigation</title>
+    <title>FloraVita | AI Smart Irrigation</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"/>
 </head>
-<body class="pb-32"> <header class="p-6 flex justify-between items-center">
-        <div class="flex items-center gap-2">
-            <div class="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
-                <i class="fas fa-droplet text-white"></i>
-            </div>
-            <span class="text-xl font-bold tracking-tighter">AQUA<span class="text-blue-400">FLOW</span></span>
+<body class="pb-32">
+<header class="p-6 flex justify-between items-center">
+    <div class="flex items-center gap-2">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
+            <i class="fas fa-leaf text-blue-500 text-3xl"></i>
         </div>
-        {% if session.get('user_id') %}
-        <a href="/settings" class="w-10 h-10 rounded-full border border-gray-700 flex items-center justify-center overflow-hidden">
-             <img src="https://ui-avatars.com/api/?name={{ session.username }}&background=0D8ABC&color=fff" alt="Profile">
-        </a>
-        {% endif %}
-    </header>
-
-    <main class="px-6">
-        {% block body %} {% endblock %}
-    </main>
-
+        <span class="text-xl font-bold tracking-tighter">Flora<span class="text-blue-400">VITA</span></span>
+    </div>
     {% if session.get('user_id') %}
-        {% include 'components/menu.html' %}
+    <a href="/settings"
+       class="w-10 h-10 rounded-full border border-gray-700 flex items-center justify-center overflow-hidden">
+        <img src="https://ui-avatars.com/api/?name={{ session.username }}&background=0D8ABC&color=fff" alt="Profile">
+    </a>
     {% endif %}
+</header>
 
-    <script>
-        // Smooth Tab Transition logic
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', function() {
-                // Add fluid feedback
-                this.style.transform = "scale(0.9)";
-                setTimeout(() => this.style.transform = "scale(1)", 100);
-            });
+<main class="px-6">
+    {% block body %} {% endblock %}
+</main>
+
+{% if session.get('user_id') %}
+{% include 'components/menu.html' %}
+{% endif %}
+
+<script>
+    // Smooth Tab Transition logic
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', function () {
+            // Add fluid feedback
+            this.style.transform = "scale(0.9)";
+            setTimeout(() => this.style.transform = "scale(1)", 100);
         });
-    </script>
+    });
+</script>
 </body>
 </html>

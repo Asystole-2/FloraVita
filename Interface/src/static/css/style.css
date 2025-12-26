@@ -7,10 +7,12 @@
 }
 
 body {
-    background: radial-gradient(circle at top right, #1a1f2b, var(--bg-dark));
+    background: #020617;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
     color: #e6edf3;
     font-family: 'Inter', sans-serif;
-    overflow-x: hidden;
 }
 
 /* Horizontal Card Container */
@@ -78,7 +80,7 @@ body {
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 24px;
+    border-radius: 18px;
     box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
 }
 
@@ -113,4 +115,10 @@ body {
 .accordion-panel.open {
     max-height: 500px;
     opacity: 1;
+}
+* {
+    transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.pb-32 {
+    padding-bottom: 2rem !important;
 }
