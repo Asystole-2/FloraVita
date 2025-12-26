@@ -52,3 +52,12 @@ CREATE TABLE IF NOT EXISTS user_notifications (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (plant_id) REFERENCES plants(id) ON DELETE SET NULL
 );
+
+-- Register 2 users then insert the sample data
+INSERT INTO plants (name, location, user_id, moisture_threshold) VALUES
+('Office Fern', 'Main Desk', 2, 35),
+('Kitchen Basil', 'South Window', 1, 40),
+('Mint Pot', 'Patio', 2, 40),
+('Living Room Lily', 'Corner Stand', 2, 30),
+('Greenhouse Tomato', 'Bed A1', 1, 45 );
+
