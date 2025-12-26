@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS plants (
     location VARCHAR(100),
     user_id INT,
     moisture_threshold INT DEFAULT 30, -- Trigger pump below this percentage
-    status ENUM('active', 'maintenance', 'inactive') DEFAULT 'active',
+    image_url VARCHAR(255) DEFAULT 'default_plant.png',
+    environment_desc VARCHAR(255) DEFAULT 'Bright, consistent sunlight, near a window',
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
