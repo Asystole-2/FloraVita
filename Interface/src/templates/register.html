@@ -1,22 +1,95 @@
 {% extends "layout.html" %}
 {% block body %}
-<div class="max-w-md mx-auto mt-20 p-8 bg-secondary rounded-xl shadow-lg">
-    <h2 class="text-3xl font-bold text-white mb-6 text-center">Create Account</h2>
-    <form method="POST" action="/register" class="space-y-4">
-        <div>
-            <label class="text-text-muted text-sm">Username</label>
-            <input type="text" name="username" required class="w-full p-3 bg-primary border border-border rounded-lg text-white">
+<div class="auth-bg min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <div class="max-w-md w-full glass-card rounded-3xl p-8 z-10 reveal active">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-14 h-14 bg-blue-500/10 rounded-2xl mb-4 border border-blue-500/20">
+                <i class="fas fa-leaf text-blue-400 text-2xl"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Initialize Registry</h2>
+            <p class="text-gray-400 text-[10px] tracking-[0.2em] uppercase mt-1">Start your botanical journey</p>
         </div>
-        <div>
-            <label class="text-text-muted text-sm">Email</label>
-            <input type="email" name="email" required class="w-full p-3 bg-primary border border-border rounded-lg text-white">
+
+        <form method="POST" action="/register" class="space-y-4">
+            <div>
+                <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">User Tag</label>
+                <input type="text" name="username" required minlength="3"
+                       value="{{ username if username }}"
+                       class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/40 outline-none transition-all">
+            </div>
+            <div>
+                <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Email</label>
+                <input type="email" name="email" required
+                       value="{{ email if email }}"
+                       class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/40 outline-none transition-all">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Password</label>
+                    <input type="password" name="password" id="pw" required placeholder="••••••••"
+                           class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 outline-none transition-all">
+                </div>
+                <div>
+                    <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Re-Verify</label>
+                    <input type="password" name="confirm_password" id="cpw" required placeholder="••••••••"
+                           class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/40 outline-none transition-all">
+                </div>
+            </div>
+
+            <button type="submit"
+                    class="w-full py-3.5 mt-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase tracking-[0.2em] shadow-lg shadow-emerald-900/20 transition-all active:scale-95">
+                Register Profile
+            </button>
+        </form>
+
+        <div class="relative flex py-6 items-center">
+            <div class="flex-grow border-t border-white/5"></div>
+            <span class="flex-shrink mx-4 text-[9px] text-gray-500 uppercase font-bold tracking-widest">Account Sync</span>
+            <div class="flex-grow border-t border-white/5"></div>
         </div>
-        <div>
-            <label class="text-text-muted text-sm">Password</label>
-            <input type="password" name="password" required class="w-full p-3 bg-primary border border-border rounded-lg text-white">
-        </div>
-        <button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700">Register</button>
-    </form>
-    <p class="mt-4 text-center text-text-muted">Already have an account? <a href="/login" class="text-blue-400">Login here</a></p>
+
+        <a href="{{ url_for('google_login') }}"
+           class="w-full flex justify-center items-center py-3 bg-white/5 border border-white/10 rounded-xl text-white text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-all">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-4 h-4 mr-3">
+            Sign up with Google
+        </a>
+
+        <p class="mt-8 text-center text-[10px] text-gray-500 tracking-wide">
+            Already a User? <a href="/login" class="text-blue-400 font-bold hover:text-blue-300 ml-1">Log in
+            Here</a>
+        </p>
+    </div>
 </div>
+
+<footer class="relative z-10 py-10 px-6 border-t border-white/5 text-center bg-[#020617]">
+    <div class="flex items-center justify-center gap-2 mb-4">
+        <i class="fas fa-leaf text-blue-500 text-2xl"></i>
+        <span class="text-sm font-bold tracking-tighter uppercase">FloraVita</span>
+    </div>
+    <p class="text-[10px] text-gray-600">© 2025 FloraVita Ecosystem. Designed for Innovation.</p>
+</footer>
+
+<script>
+    // Real-time password verification highlight
+    const pw = document.getElementById('pw');
+    const cpw = document.getElementById('cpw');
+
+    function validate() {
+        if (pw.value && cpw.value) {
+            if (pw.value === cpw.value) {
+                cpw.classList.add('border-emerald-500/30');
+                cpw.classList.remove('border-red-500/30');
+            } else {
+                cpw.classList.add('border-red-500/30');
+                cpw.classList.remove('border-emerald-500/30');
+            }
+        }
+    }
+
+    pw.addEventListener('input', validate);
+    cpw.addEventListener('input', validate);
+</script>
 {% endblock %}

@@ -1,85 +1,65 @@
 {% extends "layout.html" %}
-
 {% block body %}
-<div class="min-h-screen flex items-center justify-center bg-primary px-4">
-    <div class="max-w-md w-full bg-secondary rounded-xl shadow-2xl p-8 border border-border">
-        <div class="text-center mb-8">
-            <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
-                <i class="fas fa-leaf text-blue-500 text-3xl"></i>
+<div class="auth-bg min-h-screen flex items-center justify-center px-4">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <div class="max-w-md w-full glass-card rounded-3xl p-8 z-10">
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center w-14 h-14 bg-blue-500/10 rounded-2xl mb-4 border border-blue-500/20">
+                <i class="fas fa-leaf text-blue-400 text-2xl"></i>
             </div>
-            <h2 class="text-3xl font-extrabold text-text-primary">Welcome Back</h2>
-            <p class="text-text-muted mt-2">Sign in to manage your irrigation system</p>
+            <h2 class="text-2xl font-bold tracking-tight text-white">FloraVita</h2>
+            <p class="text-gray-400 text-xs uppercase tracking-widest mt-1">Intelligence in every leaf</p>
         </div>
 
-        <form method="POST" action="{{ url_for('login') }}" class="space-y-6">
+        <form method="POST" action="{{ url_for('login') }}" class="space-y-4">
             <div>
-                <label for="identifier" class="block text-sm font-medium text-text-secondary mb-2">
-                    Username or Email
-                </label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-text-muted">
-                        <i class="fas fa-user"></i>
-                    </span>
-                    <input type="text" name="identifier" id="identifier" required 
-                           class="block w-full pl-10 pr-3 py-3 bg-primary border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                           placeholder="Enter your username or email">
-                </div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Identity</label>
+                <input type="text" name="identifier" required
+                       value="{{ identifier if identifier }}"
+                       class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition"
+                       placeholder="Username or Email">
             </div>
 
             <div>
-                <label for="password" class="block text-sm font-medium text-text-secondary mb-2">
-                    Password
-                </label>
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-text-muted">
-                        <i class="fas fa-lock"></i>
-                    </span>
-                    <input type="password" name="password" id="password" required 
-                           class="block w-full pl-10 pr-3 py-3 bg-primary border border-border rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                           placeholder="••••••••">
-                </div>
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2 ml-1">Password</label>
+                <input type="password" name="password" required
+                       class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/50 outline-none transition"
+                       placeholder="••••••••">
             </div>
 
-            <div class="flex items-center justify-between">
-                <div class="flex items-center">
-                    <input id="remember-me" name="remember-me" type="checkbox" 
-                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-border rounded bg-primary">
-                    <label for="remember-me" class="ml-2 block text-sm text-text-muted">
-                        Remember me
-                    </label>
-                </div>
-                <div class="text-sm">
-                    <a href="#" class="font-medium text-blue-400 hover:text-blue-300">
-                        Forgot password?
-                    </a>
-                </div>
-            </div>
-
-            <button type="submit" 
-                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150">
-                Sign In
+            <button type="submit"
+                    class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold tracking-widest uppercase shadow-lg shadow-blue-600/20 transition-all active:scale-95">
+                Authorize
             </button>
         </form>
 
-        <div class="mt-8 pt-6 border-t border-border text-center">
-            <p class="text-sm text-text-muted">
-                Don't have an account? 
-                <a href="{{ url_for('register') }}" class="font-bold text-blue-400 hover:text-blue-300">
-                    Register now
-                </a>
-            </p>
+        <div class="relative flex py-6 items-center">
+            <div class="flex-grow border-t border-white/5"></div>
+            <span class="flex-shrink mx-4 text-[10px] text-gray-500 uppercase font-bold">Social Access</span>
+            <div class="flex-grow border-t border-white/5"></div>
         </div>
+
+        <a href="{{ url_for('google_login') }}"
+           class="w-full flex justify-center items-center py-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition text-white text-xs font-bold uppercase tracking-widest">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-4 h-4 mr-3">
+            Log in with Google
+        </a>
+
+        <p class="mt-8 text-center text-xs text-gray-500">
+            New explorer? <a href="{{ url_for('register') }}" class="text-blue-400 font-bold hover:text-blue-300">Join
+            FloraVita</a>
+        </p>
     </div>
 </div>
-
-<script>
-    document.querySelectorAll('input').forEach(input => {
-        input.addEventListener('focus', () => {
-            input.parentElement.querySelector('span').classList.add('text-blue-500');
-        });
-        input.addEventListener('blur', () => {
-            input.parentElement.querySelector('span').classList.remove('text-blue-500');
-        });
-    });
-</script>
+<footer class="py-10 px-6 border-t border-white/5 text-center">
+    <div class="flex items-center justify-center gap-2 mb-4">
+        <div class="w-8 h-8 flex items-center justify-center">
+            <i class="fas fa-leaf text-blue-500 text-3xl"></i>
+        </div>
+        <span class="text-sm font-bold tracking-tighter uppercase">FloraVita</span>
+    </div>
+    <p class="text-[10px] text-gray-600">© 2025 FloraVita Ecosystem. Built for Innovation.</p>
+</footer>
 {% endblock %}

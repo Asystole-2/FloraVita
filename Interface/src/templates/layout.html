@@ -7,8 +7,41 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet"/>
+    <style>
+        /* Flash Message Animation */
+        @keyframes slide-in {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-slide-in { animation: slide-in 0.4s cubic-bezier(0.23, 1, 0.32, 1); }
+    </style>
 </head>
 <body class="pb-32">
+<div class="fixed top-6 right-6 z-[3000] space-y-3 max-w-sm w-full">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="glass-card p-4 rounded-2xl border-l-4 animate-slide-in flex items-center gap-3 backdrop-blur-xl
+                          {% if category == 'error' %} border-red-500/50 bg-red-500/10
+                          {% elif category == 'success' %} border-emerald-500/50 bg-emerald-500/10
+                          {% else %} border-blue-500/50 bg-blue-500/10 {% endif %}">
+
+                  {% if category == 'error' %}
+                    <i class="fas fa-shield-exclamation text-red-400"></i>
+                  {% elif category == 'success' %}
+                    <i class="fas fa-check-double text-emerald-400"></i>
+                  {% else %}
+                    <i class="fas fa-info-circle text-blue-400"></i>
+                  {% endif %}
+
+                  <span class="text-[11px] font-bold uppercase tracking-wider leading-tight text-gray-200">
+                      {{ message }}
+                  </span>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+    </div>
 <header class="p-6 flex justify-between items-center">
     <div class="flex items-center gap-2">
         <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-600/20 rounded-full mb-4">
@@ -41,6 +74,14 @@
             setTimeout(() => this.style.transform = "scale(1)", 100);
         });
     });
+    setTimeout(() => {
+            document.querySelectorAll('.animate-slide-in').forEach(el => {
+                el.style.opacity = '0';
+                el.style.transform = 'translateX(20px)';
+                el.style.transition = 'all 0.5s ease';
+                setTimeout(() => el.remove(), 2000);
+            });
+        }, 5000);
 </script>
 </body>
 </html>
