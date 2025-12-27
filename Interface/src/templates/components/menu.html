@@ -1,18 +1,78 @@
-<nav class="bottom-nav">
-    <a href="{{ url_for('dashboard') }}" class="nav-item {% if active_page == 'dashboard' %}active{% endif %}">
-        <i class="fas fa-home-alt text-xl mb-1"></i>
-        <span>Home</span>
-    </a>
-    <a href="{{ url_for('notifications') }}" class="nav-item {% if active_page == 'notifications' %}active{% endif %}">
-        <i class="fas fa-bell text-xl mb-1"></i>
-        <span>Alerts</span>
-    </a>
-    <a href="{{ url_for('settings') }}" class="nav-item {% if active_page == 'settings' %}active{% endif %}">
-        <i class="fas fa-cog text-xl mb-1"></i>
-        <span>Settings</span>
-    </a>
-    <a href="{{ url_for('logout') }}" class="nav-item text-red-500">
-        <i class="fas fa-sign-out-alt text-xl mb-1"></i>
-        <span>Log out</span>
-    </a>
-</nav>
+<div id="nav-container" class="fixed bottom-6 left-6 z-[2000]">
+
+    <nav id="main-nav" class="glass-card rounded-full p-2 flex items-center shadow-2xl border-white/10 overflow-hidden nav-no-transition transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1)" style="max-width: 56px;">
+
+        <button onclick="toggleMenu()" class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500/10 text-blue-400 shrink-0 hover:bg-blue-500/20 transition-all">
+            <i id="toggle-icon" class="fas fa-bars transition-all duration-300"></i>
+        </button>
+
+        <div id="nav-links" class="flex items-center gap-6 px-4 opacity-0 pointer-events-none transition-all duration-300 transform -translate-x-4">
+            <a href="{{ url_for('dashboard') }}" class="flex flex-col items-center group">
+                <i class="fas fa-home-alt text-lg {% if active_page == 'dashboard' %}text-blue-400{% else %}text-gray-500 group-hover:text-gray-300{% endif %}"></i>
+                <span class="text-[8px] font-black uppercase tracking-widest mt-1 {% if active_page == 'dashboard' %}text-blue-400{% else %}text-gray-500{% endif %}">Home</span>
+            </a>
+
+            <a href="{{ url_for('notifications') }}" class="flex flex-col items-center group">
+                <i class="fas fa-bell text-lg {% if active_page == 'notifications' %}text-blue-400{% else %}text-gray-500 group-hover:text-gray-300{% endif %}"></i>
+                <span class="text-[8px] font-black uppercase tracking-widest mt-1 {% if active_page == 'notifications' %}text-blue-400{% else %}text-gray-500{% endif %}">Alerts</span>
+            </a>
+
+            <a href="{{ url_for('settings') }}" class="flex flex-col items-center group">
+                <i class="fas fa-cog text-lg {% if active_page == 'settings' %}text-blue-400{% else %}text-gray-500 group-hover:text-gray-300{% endif %}"></i>
+                <span class="text-[8px] font-black uppercase tracking-widest mt-1 {% if active_page == 'settings' %}text-blue-400{% else %}text-gray-500{% endif %}">System</span>
+            </a>
+
+            <div class="w-[1px] h-6 bg-white/10"></div>
+
+            <a href="{{ url_for('logout') }}" class="flex flex-col items-center group">
+                <i class="fas fa-sign-out-alt text-lg text-red-500/60 hover:text-red-400"></i>
+                <span class="text-[8px] font-black uppercase tracking-widest mt-1 text-red-500/60">Exit</span>
+            </a>
+        </div>
+    </nav>
+</div>
+
+<script>
+    const nav = document.getElementById('main-nav');
+    const links = document.getElementById('nav-links');
+    const icon = document.getElementById('toggle-icon');
+
+    // 1. Immediate State Check (Prevents Flash)
+    (function initMenu() {
+        const savedState = localStorage.getItem('floraVita_menu_state');
+        if (savedState === 'expanded') {
+            nav.style.maxWidth = '400px';
+            links.style.opacity = '1';
+            links.style.pointerEvents = 'auto';
+            links.style.transform = 'translateX(0)';
+            icon.classList.replace('fa-bars', 'fa-times');
+            nav.classList.add('expanded');
+        }
+        // Force a tiny delay before allowing transitions again
+        setTimeout(() => {
+            nav.classList.remove('nav-no-transition');
+        }, 50);
+    })();
+
+    function toggleMenu() {
+        if (nav.classList.contains('expanded')) {
+            // Collapse
+            nav.style.maxWidth = '56px';
+            links.style.opacity = '0';
+            links.style.pointerEvents = 'none';
+            links.style.transform = 'translateX(-16px)';
+            icon.classList.replace('fa-times', 'fa-bars');
+            nav.classList.remove('expanded');
+            localStorage.setItem('floraVita_menu_state', 'collapsed');
+        } else {
+            // Expand
+            nav.style.maxWidth = '400px';
+            links.style.opacity = '1';
+            links.style.pointerEvents = 'auto';
+            links.style.transform = 'translateX(0)';
+            icon.classList.replace('fa-bars', 'fa-times');
+            nav.classList.add('expanded');
+            localStorage.setItem('floraVita_menu_state', 'expanded');
+        }
+    }
+</script>

@@ -65,7 +65,6 @@ def index():
         return redirect(url_for("dashboard"))
     return render_template("index.html")
 
-
 def password_complexity_check(password):
     """
     Returns a list of security requirements not met by the password.
@@ -82,7 +81,6 @@ def password_complexity_check(password):
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
         errors.append("One special character")
     return errors
-
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -139,7 +137,6 @@ def register():
 
     return render_template("register.html")
 
-
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -179,7 +176,6 @@ def google_login():
     redirect_uri = url_for('google_authorize', _external=True)
     return google.authorize_redirect(redirect_uri)
 
-
 @app.route('/authorize')
 def google_authorize():
     token = google.authorize_access_token()
@@ -210,7 +206,6 @@ def google_authorize():
     flash("Google authentication failed.", "error")
     return redirect(url_for("login"))
 
-
 @app.route("/logout")
 def logout():
     session.clear()
@@ -219,7 +214,6 @@ def logout():
 
 
 # --- Dashboard & Plant Management ---
-
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -235,7 +229,6 @@ def dashboard():
     user_plants = cur.fetchall()
     cur.close()
     return render_template("dashboard.html", plants=user_plants, active_page="dashboard")
-
 
 @app.route("/plant/<int:plant_id>")
 @login_required
@@ -257,7 +250,6 @@ def plant_detail(plant_id):
     last_reading = cur.fetchone()
     cur.close()
     return render_template("plant_detail.html", plant=plant, last_reading=last_reading)
-
 
 @app.route("/api/ai-tips/<int:plant_id>")
 @login_required
@@ -283,7 +275,6 @@ def get_ai_tips(plant_id):
 
     return analyzer.get_care_advice(plant_data)
 
-
 @app.route("/update-plant-photo/<int:plant_id>", methods=["POST"])
 @login_required
 def update_photo(plant_id):
@@ -307,7 +298,6 @@ def update_photo(plant_id):
 
 
 # --- System Routes ---
-
 @app.route("/notifications")
 @login_required
 def notifications():
@@ -319,22 +309,118 @@ def notifications():
     return render_template("notifications.html", active_page="notifications", notifications=user_notifications)
 
 
-@app.route("/settings")
+@app.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():
     user_id = session.get("user_id")
     cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-    user_profile = cur.fetchone()
 
-    users_list = []
-    if session.get("role") == "admin":
-        cur.execute("SELECT id, username, email, role FROM users ORDER BY id ASC")
-        users_list = cur.fetchall()
+    # Pre-define hardware IDs (should be available for both GET and POST)
+    available_devices = ["FV-NODE-001", "FV-NODE-002", "FV-NODE-003", "FV-NODE-004"]
+
+    if request.method == "POST":
+        new_username = request.form.get("username", "").lower().strip()
+        new_email = request.form.get("email", "").lower().strip()
+        new_password = request.form.get("new_password")
+        current_password_verify = request.form.get("current_password_verify")
+
+        # 1. Fetch current password for verification
+        cur.execute("SELECT password FROM users WHERE id = %s", (user_id,))
+        user_record = cur.fetchone()
+
+        if not check_password_hash(user_record['password'], current_password_verify):
+            flash("Security Violation: Identity verification failed.", "error")
+        else:
+            try:
+                # 2. Update basic info
+                cur.execute("UPDATE users SET username = %s, email = %s WHERE id = %s",
+                            (new_username, new_email, user_id))
+
+                # 3. Handle password update if provided
+                if new_password:
+                    pw_errors = password_complexity_check(new_password)
+                    if pw_errors:
+                        flash("Security Protocol: " + ", ".join(pw_errors), "error")
+                        # We redirect here to clear POST data and show the flash
+                        cur.close()
+                        return redirect(url_for("settings"))
+
+                    cur.execute("UPDATE users SET password = %s WHERE id = %s",
+                                (generate_password_hash(new_password), user_id))
+
+                mysql.connection.commit()
+                session["username"] = new_username
+                flash("Registry Synchronized: Profile updated successfully.", "success")
+            except Exception:
+                flash("Registry Conflict: Username or Email already exists.", "error")
+
+        # After a POST, it is best practice to redirect to the same page (GET)
+        # to prevent "Confirm Form Resubmission" on refresh.
+        cur.close()
+        return redirect(url_for("settings"))
+
+    # --- GET REQUEST LOGIC ---
+    # Fetch fresh user profile data to display in the form
+    cur.execute("SELECT username, email FROM users WHERE id = %s", (user_id,))
+    user_profile = cur.fetchone()
+    cur.close()
+
+    return render_template("settings.html",
+                           user_profile=user_profile,
+                           devices=available_devices,
+                           active_page="settings")
+
+@app.route("/delete-profile", methods=["POST"])
+@login_required
+def delete_profile():
+    user_id = session.get("user_id")
+    password_verify = request.form.get("delete_password_verify")
+
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT password FROM users WHERE id = %s", (user_id,))
+    user = cur.fetchone()
+
+    if user and check_password_hash(user['password'], password_verify):
+        try:
+            # Delete related data first if not handled by ON DELETE CASCADE
+            cur.execute("DELETE FROM moisture_readings WHERE plant_id IN (SELECT id FROM plants WHERE user_id = %s)",
+                        (user_id,))
+            cur.execute("DELETE FROM plants WHERE user_id = %s", (user_id,))
+            cur.execute("DELETE FROM user_notifications WHERE user_id = %s", (user_id,))
+            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+            mysql.connection.commit()
+            session.clear()
+            flash("Termination Complete: Profile and botanical data purged.", "success")
+            return redirect(url_for("index"))
+        except Exception as e:
+            flash("System Error: Failed to purge data.", "error")
+    else:
+        flash("Security Violation: Incorrect password for account termination.", "error")
 
     cur.close()
-    return render_template("settings.html", users=users_list, user_profile=user_profile, active_page="settings")
+    return redirect(url_for("settings"))
 
+@app.route("/add-plant", methods=["POST"])
+@login_required
+def add_plant():
+    name = request.form.get("plant_name")
+    location = request.form.get("location")
+    threshold = request.form.get("threshold", 30)
+    user_id = session.get("user_id")
+
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO plants (name, location, moisture_threshold, user_id) 
+            VALUES (%s, %s, %s, %s)
+        """, (name, location, threshold, user_id))
+        mysql.connection.commit()
+        flash("Ecosystem Updated: New botanical device synchronized.", "success")
+    except Exception as e:
+        flash("Configuration Error: Could not register device.", "error")
+    finally:
+        cur.close()
+    return redirect(url_for("settings"))
 
 if __name__ == '__main__':
     app.run(debug=True)

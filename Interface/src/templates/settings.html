@@ -1,73 +1,259 @@
 {% extends "layout.html" %}
-
 {% block body %}
-<div class="app-container">
-    {% include 'components/menu.html' %}
+<div class="auth-bg min-h-screen pt-10 pb-32 px-4 relative overflow-hidden">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
 
-    <main class="main-content">
-        <header class="page-header">
-            <h1 class="text-4xl font-extrabold text-text-primary">Account Settings</h1>
-            <p class="text-text-muted">Manage your profile and system preferences.</p>
-        </header>
+    <div class="max-w-2xl mx-auto space-y-6 z-10 relative">
+        <div class="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/10 w-fit mx-auto mb-8">
+            <button onclick="switchTab('profile-tab')" id="btn-profile"
+                    class="tab-btn px-6 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all bg-blue-600 text-white">
+                Profile Info
+            </button>
+            <button onclick="switchTab('plants-tab')" id="btn-plants"
+                    class="tab-btn px-6 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all text-gray-400 hover:text-white">
+                Configure Plants
+            </button>
+        </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-            <section class="lg:col-span-1">
-                <div class="card bg-secondary p-6 rounded-xl border border-border">
-                    <h3 class="text-xl font-bold text-text-primary mb-6">Your Profile</h3>
-                    <form action="/update-profile" method="POST" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-text-secondary mb-1">Username</label>
-                            <input type="text" name="username" value="{{ user_profile.username }}" 
-                                   class="w-full p-3 bg-primary border border-border rounded-lg text-text-primary">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-text-secondary mb-1">Email</label>
-                            <input type="email" name="email" value="{{ user_profile.email }}" 
-                                   class="w-full p-3 bg-primary border border-border rounded-lg text-text-primary">
-                        </div>
-                        <button type="submit" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold transition">
-                            Save Profile
-                        </button>
-                    </form>
-                </div>
-            </section>
-
-            {% if session.role == 'admin' %}
-            <section class="lg:col-span-2">
-                <div class="card bg-secondary p-6 rounded-xl border border-border">
-                    <h3 class="text-xl font-bold text-text-primary mb-6">User Management (Admin)</h3>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-text-secondary">
-                            <thead class="border-b border-border text-text-muted text-sm">
-                                <tr>
-                                    <th class="pb-3 px-2">User</th>
-                                    <th class="pb-3 px-2">Email</th>
-                                    <th class="pb-3 px-2">Role</th>
-                                    <th class="pb-3 px-2 text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for user in users %}
-                                <tr class="border-b border-border/50 hover:bg-primary/30 transition">
-                                    <td class="py-4 px-2 font-semibold text-text-primary">{{ user.username }}</td>
-                                    <td class="py-4 px-2">{{ user.email }}</td>
-                                    <td class="py-4 px-2">
-                                        <span class="px-2 py-1 rounded-md text-xs {% if user.role == 'admin' %}bg-red-900/30 text-red-400{% else %}bg-blue-900/30 text-blue-400{% endif %}">
-                                            {{ user.role|upper }}
-                                        </span>
-                                    </td>
-                                    <td class="py-4 px-2 text-right">
-                                        <button class="text-red-400 hover:text-red-300 text-sm">Delete</button>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+        <!-- Profile Tab -->
+        <div id="profile-tab" class="tab-content space-y-6">
+            <div class="glass-card rounded-3xl p-8">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center border border-blue-500/20">
+                        <i class="fas fa-user-gear text-blue-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Profile Settings</h2>
+                        <p class="text-gray-500 text-[10px] uppercase tracking-widest">Modify your botanical
+                            identity</p>
                     </div>
                 </div>
-            </section>
-            {% endif %}
+
+                <form method="POST" action="/settings" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Username
+                                Tag</label>
+                            <input type="text" name="username" value="{{ user_profile.username }}" required
+                                   class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/40 outline-none transition-all">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Registry
+                                Email</label>
+                            <input type="email" name="email" value="{{ user_profile.email }}" required
+                                   class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/40 outline-none transition-all">
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-white/5 border border-white/5 rounded-2xl">
+                        <h3 class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-4">Password Update</h3>
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">New
+                                Passcode</label>
+                            <div class="relative group">
+                                <input type="password" name="new_password" id="new-pw" placeholder="••••••••"
+                                       class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-blue-500/40 outline-none transition-all">
+                                <button type="button" onclick="togglePassword('new-pw', this)"
+                                        class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-blue-400 transition-colors px-2 pt-1">
+                                    <i class="fas fa-eye text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-6 border-t border-white/5">
+                        <div class="mb-4">
+                            <label class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest ml-1">Identity
+                                Verification</label>
+                            <p class="text-[10px] text-gray-500 mb-2">Required to authorize profile changes.</p>
+                            <div class="relative group">
+                                <input type="password" name="current_password_verify" id="verify-pw" required
+                                       placeholder="Current Passcode"
+                                       class="w-full p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-white text-sm focus:ring-2 focus:ring-emerald-500/40 outline-none transition-all">
+                                <button type="button" onclick="togglePassword('verify-pw', this)"
+                                        class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-emerald-400 transition-colors px-2">
+                                    <i class="fas fa-eye text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit"
+                                class="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold uppercase tracking-[0.2em] shadow-lg shadow-blue-900/20 transition-all active:scale-95">
+                            Update Profile
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="glass-card rounded-3xl p-8 border-red-500/20 bg-red-500/5">
+                <h3 class="text-xs font-bold text-red-400 uppercase tracking-widest mb-2">Danger Zone</h3>
+                <p class="text-[11px] text-gray-500 mb-6">Terminating your profile will permanently erase all plant
+                    telemetry and history.</p>
+
+                <button onclick="document.getElementById('delete-modal').classList.remove('hidden')"
+                        class="px-6 py-2 border border-red-500/30 text-red-400 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                    Delete Profile
+                </button>
+            </div>
         </div>
-    </main>
+
+        <!-- Plants Tab -->
+        <div id="plants-tab" class="tab-content hidden space-y-6">
+            <div class="glass-card rounded-3xl p-8">
+                <div class="flex items-center gap-4 mb-8">
+                    <div class="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center border border-emerald-500/20">
+                        <i class="fas fa-microchip text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Ecosystem Setup</h2>
+                        <p class="text-gray-500 text-[10px] uppercase tracking-widest">Add Plants to your botanical
+                            profile</p>
+                    </div>
+                </div>
+
+                <form method="POST" action="/add-plant" class="space-y-6">
+                    <div>
+                        <label class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest ml-1">Connect
+                            Hardware Device</label>
+                        <div class="relative mt-1 group">
+                            <input type="text"
+                                   name="device_id"
+                                   id="device-input"
+                                   list="device-list"
+                                   required
+                                   placeholder="Select or Type Unique ID..."
+                                   class="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-emerald-500/40 focus:bg-white/10 transition-all placeholder:text-gray-600">
+
+                            <datalist id="device-list">
+                                {% for id in devices %}
+                                <option value="{{ id }}">{{ id }} (Detected)</option>
+                                {% endfor %}
+                            </datalist>
+
+                            <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 group-focus-within:text-emerald-400 transition-colors">
+                                <i class="fas fa-search text-xs"></i>
+                            </div>
+                        </div>
+                        <p class="text-[8px] text-gray-500 mt-2 ml-1 italic">Type a manual ID or select a detected
+                            FloraVita Node from the list.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Plant
+                                Name</label>
+                            <input type="text" name="plant_name" required placeholder="e.g., Office Fern"
+                                   class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Location</label>
+                            <input type="text" name="location" placeholder="e.g., Main Desk"
+                                   class="w-full p-3 mt-1 bg-white/5 border border-white/10 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-500 uppercase tracking-widest ml-1">Moisture
+                            Threshold (%)</label>
+                        <div class="flex items-center gap-4">
+                            <input type="range" name="threshold_range" id="t-range" value="30" min="0" max="100"
+                                   class="flex-grow h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                   oninput="this.nextElementSibling.value = this.value">
+                            <input type="number" name="threshold" id="t-num" value="30" min="0" max="100"
+                                   oninput="this.previousElementSibling.value = this.value"
+                                   class="w-16 p-2 bg-white/5 border border-white/10 rounded-lg text-white text-center text-xs outline-none focus:border-emerald-500/50">
+                        </div>
+                    </div>
+
+                    <button type="submit"
+                            class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold uppercase tracking-[0.2em] transition-all shadow-lg shadow-emerald-900/20 active:scale-[0.98]">
+                        Synchronize Device
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Modal -->
+    <div id="delete-modal"
+         class="fixed inset-0 z-[4000] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+        <div class="glass-card max-w-sm w-full p-8 rounded-3xl border-red-500/30">
+            <h2 class="text-xl font-bold text-white mb-2 tracking-tight">Final Verification</h2>
+            <p class="text-xs text-gray-400 mb-6">This action cannot be undone. Enter your passcode to confirm permanent
+                account termination.</p>
+
+            <form method="POST" action="/delete-profile" class="space-y-4">
+                <div class="relative group">
+                    <input type="password" name="delete_password_verify" id="delete-pw" required
+                           placeholder="Confirm Passcode"
+                           class="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-red-500/50 transition-all">
+                    <button type="button" onclick="togglePassword('delete-pw', this)"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-red-400 transition-colors px-2">
+                        <i class="fas fa-eye text-xs"></i>
+                    </button>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="document.getElementById('delete-modal').classList.add('hidden')"
+                            class="flex-1 py-3 rounded-xl bg-white/5 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            class="flex-1 py-3 rounded-xl bg-red-600 text-[10px] font-bold uppercase tracking-widest hover:bg-red-500 transition">
+                        Terminate
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
+
+<script>
+    function switchTab(tabId) {
+        // Hide all tab contents
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.classList.add('hidden');
+        });
+
+        // Show selected tab
+        const selectedTab = document.getElementById(tabId);
+        if (selectedTab) {
+            selectedTab.classList.remove('hidden');
+        }
+
+        // Update tab buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('bg-blue-600', 'text-white');
+            btn.classList.add('text-gray-400');
+        });
+
+        // Highlight active button
+        const activeBtn = tabId === 'profile-tab' ? 'btn-profile' : 'btn-plants';
+        const btnElement = document.getElementById(activeBtn);
+        if (btnElement) {
+            btnElement.classList.remove('text-gray-400');
+            btnElement.classList.add('bg-blue-600', 'text-white');
+        }
+    }
+
+    function togglePassword(inputId, btn) {
+        const input = document.getElementById(inputId);
+        const icon = btn.querySelector('i');
+        if (!input || !icon) return;
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.replace('fa-eye', 'fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.replace('fa-eye-slash', 'fa-eye');
+        }
+    }
+
+    // Initialize with profile tab open
+    document.addEventListener('DOMContentLoaded', function () {
+        switchTab('profile-tab');
+    });
+</script>
 {% endblock %}
