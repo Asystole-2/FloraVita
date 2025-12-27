@@ -122,3 +122,45 @@ body {
 .pb-32 {
     padding-bottom: 2rem !important;
 }
+
+/* Futuristic Mesh Gradient Background */
+.auth-bg {
+    background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e1b4b 100%);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* Glassmorphism Card */
+.glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* Floating Orb Background elements */
+.orb {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: 0;
+    opacity: 0.15;
+}
+.orb-1 { top: -10%; left: -10%; background: #3b82f6; animation: float 10s infinite alternate; }
+.orb-2 { bottom: -10%; right: -10%; background: #8b5cf6; animation: float 12s infinite alternate-reverse; }
+
+@keyframes float {
+    from { transform: translate(0, 0); }
+    to { transform: translate(30px, 50px); }
+}
