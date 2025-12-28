@@ -8,6 +8,8 @@
 
 body {
     background: #020617;
+    position: relative;
+    min-height: 100vh;
     margin: 0;
     padding: 0;
     overflow-x: hidden;
@@ -17,31 +19,40 @@ body {
 }
 
 /* Horizontal Card Container */
-.garden-row {
-    display: flex;
-    overflow-x: auto;
+.garden-grid {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr)); /* Mobile */
     gap: 1.5rem;
-    padding: 1rem 0 2rem 0;
-    scrollbar-width: none; /* Firefox */
 }
-.garden-row::-webkit-scrollbar { display: none; } /* Chrome/Safari */
 
-/* Clickable Glass Card */
+@media (min-width: 768px) {
+    .garden-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)); /* Tablet */
+    }
+}
+
+@media (min-width: 1280px) {
+    .garden-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr)); /* Desktop */
+    }
+}
+
 .plant-card {
-    min-width: 300px;
-    background: var(--glass);
-    backdrop-filter: blur(15px);
-    border: 1px solid var(--glass-border);
+    width: 100%; /* Occupy full width of grid cell */
+    background: rgba(30, 41, 59, 0.35);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 28px;
     overflow: hidden;
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     cursor: pointer;
 }
-
 .plant-card:hover {
     transform: translateY(-10px);
-    border-color: var(--accent-blue);
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+    background: rgba(30, 41, 59, 0.45);
+    border-color: rgba(0, 210, 255, 0.5);
+    box-shadow: 0 20px 40px rgba(0, 0, 0.6, 0.4);
 }
 
 .plant-img {
@@ -49,6 +60,12 @@ body {
     width: 100%;
     object-fit: cover;
     border-bottom: 1px solid var(--glass-border);
+}
+.plant-card h3 {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 .slick-glass {
@@ -169,3 +186,77 @@ input[type="range"]::-webkit-slider-thumb {
 #device-input::-webkit-calendar-picker-indicator {
     display: none !important; /* Hides the default arrow to use our custom search icon */
 }
+
+/* Hyper-Liquid Mesh Background */
+.liquid-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: #000; /* Pure black base for maximum contrast */
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.liquid-blob {
+    position: absolute;
+    border-radius: 45% 55% 50% 50% / 50% 50% 50% 50%; /* Irregular shape for more "organic" feel */
+    filter: blur(50px); /* Sharper definition */
+    opacity: 0.5;
+    mix-blend-mode: screen;
+    will-change: transform;
+    transition: none !important;
+}
+
+/* --- THE BLUE CORE --- */
+.blob-blue-1 { width: 50vw; height: 50vw; background: radial-gradient(circle, #1e40af, transparent); top: -10%; left: -5%; animation: moveExtreme 8s infinite alternate ease-in-out; }
+.blob-blue-2 { width: 40vw; height: 40vw; background: radial-gradient(circle, #3b82f6, transparent); top: -10%; right: 10%; animation: moveExtreme 10s infinite alternate-reverse ease-in-out; }
+
+/* --- THE BOTANICAL GREENS --- */
+.blob-green-1 { width: 60vw; height: 60vw; background: radial-gradient(circle, #065f46, transparent); top: -5%; left: -10%; animation: moveExtreme 7s infinite alternate ease-in-out; animation-delay: -2s; }
+.blob-green-2 { width: 20vw; height: 15vw; background: radial-gradient(circle, #10b981, transparent); top: 10%; right: 20%; animation: moveExtreme 9s infinite alternate-reverse ease-in-out; }
+.blob-green-3 { width: 45vw; height: 45vw; background: radial-gradient(circle, #047857, transparent); top: 40%; left: 30%; animation: moveExtreme 11s infinite alternate ease-in-out; }
+
+/* --- THE QUANTUM PURPLES --- */
+.blob-purple-1 { width: 35vw; height: 35vw; background: radial-gradient(circle, #7e22ce, transparent); bottom: 15%; right: 5%; animation: moveExtreme 6s infinite alternate ease-in-out; animation-delay: -1s; }
+.blob-purple-2 { width: 25vw; height: 25vw; background: radial-gradient(circle, #a855f7, transparent); top: -5%; right: 30%; animation: moveExtreme 12s infinite alternate-reverse ease-in-out; }
+
+/* High-Speed Organic Keyframes */
+@keyframes moveExtreme {
+    0% { transform: translate(0, 0) scale(1) rotate(0deg); border-radius: 45% 55% 50% 50%; }
+    33% { transform: translate(30%, 20%) scale(1.3) rotate(120deg); border-radius: 55% 45% 60% 40%; }
+    66% { transform: translate(-15%, 35%) scale(0.8) rotate(240deg); border-radius: 40% 60% 30% 70%; }
+    100% { transform: translate(10%, -10%) scale(1.1) rotate(360deg); border-radius: 45% 55% 50% 50%; }
+}
+
+/* Raindrop Animation */
+.raindrops-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: hidden;
+}
+
+.rain-drop {
+    position: absolute;
+    top: -50px;
+    width: 3px;
+    height: 40px;
+    background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.6));
+    border-radius: 100%;
+    animation: rainFall 5s linear infinite;
+}
+
+@keyframes rainFall {
+    0% { transform: translateY(0) scaleY(1); opacity: 0; }
+    10% { opacity: 0.8; } /* Higher initial opacity */
+    90% { opacity: 0.4; }
+    100% { transform: translateY(800px) scaleY(1.2); opacity: 0; }
+}
+

@@ -29,7 +29,7 @@ api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     print("WARNING: GEMINI_API_KEY not found in .env file!")
 genai.configure(api_key=api_key)
-ai_model = genai.GenerativeModel('gemini-pro')
+ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 # OAuth Configuration for Google Login
 oauth = OAuth(app)
@@ -421,6 +421,96 @@ def add_plant():
     finally:
         cur.close()
     return redirect(url_for("settings"))
+
+
+@app.route("/update-threshold/<int:plant_id>", methods=["POST"])
+@login_required
+def update_threshold(plant_id):
+    data = request.get_json()
+    print(f"DEBUG: Received data: {data}")
+    print(f"DEBUG: Plant ID: {plant_id}, User ID: {session['user_id']}")
+
+    if not data or 'threshold' not in data:
+        print("DEBUG: Malformed request - no threshold in data")
+        return {"status": "error", "message": "Malformed request"}, 400
+
+    new_threshold = data.get("threshold")
+    print(f"DEBUG: New threshold value: {new_threshold}")
+
+    cur = mysql.connection.cursor()
+
+    try:
+        # First, check if the plant exists and belongs to the user
+        cur.execute("SELECT moisture_threshold FROM plants WHERE id = %s AND user_id = %s",
+                    (plant_id, session['user_id']))
+        plant = cur.fetchone()
+
+        print(f"DEBUG: Plant query result: {plant}")
+
+        if not plant:
+            print(f"DEBUG: Plant not found or unauthorized")
+            return {"status": "error", "message": "Unauthorized or plant not found"}, 404
+
+        # Update the threshold
+        cur.execute("""
+                    UPDATE plants
+                    SET moisture_threshold = %s
+                    WHERE id = %s
+                      AND user_id = %s
+                    """, (new_threshold, plant_id, session['user_id']))
+
+        mysql.connection.commit()
+        print(f"DEBUG: Successfully updated threshold to {new_threshold}")
+        return {"status": "success", "threshold": new_threshold}
+    except Exception as e:
+        mysql.connection.rollback()
+        print(f"DEBUG: Error occurred: {str(e)}")
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/remove-plant-photo/<int:plant_id>", methods=["POST"])
+@login_required
+def remove_photo(plant_id):
+    cur = mysql.connection.cursor()
+    cur.execute("UPDATE plants SET image_url = 'default_plant.png' WHERE id = %s AND user_id = %s",
+                (plant_id, session['user_id']))
+    mysql.connection.commit()
+    cur.close()
+    flash("Photo removed successfully.", "success")
+    return redirect(url_for('dashboard'))
+
+@app.route("/delete-plant/<int:plant_id>", methods=["POST"])
+@login_required
+def delete_plant(plant_id):
+    cur = mysql.connection.cursor()
+    cur.execute("DELETE FROM plants WHERE id = %s AND user_id = %s", (plant_id, session['user_id']))
+    mysql.connection.commit()
+    cur.close()
+    flash("Plant removed from your garden.", "success")
+    return redirect(url_for('dashboard'))
+
+@app.route("/update-plant-info/<int:plant_id>", methods=["POST"])
+@login_required
+def update_plant_info(plant_id):
+    data = request.get_json()
+    new_name = data.get("name")
+    new_location = data.get("location")
+
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("""
+            UPDATE plants 
+            SET name = %s, location = %s 
+            WHERE id = %s AND user_id = %s
+        """, (new_name, new_location, plant_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        cur.close()
 
 if __name__ == '__main__':
     app.run(debug=True)
