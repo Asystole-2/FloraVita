@@ -42,10 +42,40 @@
                                 class="absolute top-4 left-4 bg-black/60 backdrop-blur-md p-2 rounded-lg text-white/70 hover:text-red-400 border border-white/10 transition">
                             <i class="fas fa-trash-alt text-xl"></i>
                         </button>
-                        <div class="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black to-transparent">
-                            <h2 id="modal-title" class="text-2xl font-black text-white tracking-tighter">--</h2>
-                            <p id="modal-location"
-                               class="text-blue-400 text-[10px] uppercase tracking-widest font-bold">--</p>
+                        <div class="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black via-black/60 to-transparent">
+                            <div id="display-identity">
+                                <div class="flex items-center justify-between">
+                                    <h2 id="modal-title" class="text-2xl font-black text-white tracking-tighter">--</h2>
+                                    <button onclick="toggleEditIdentity(true)"
+                                            class="text-white/30 hover:text-white transition">
+                                        <i class="fas fa-edit text-sm"></i>
+                                    </button>
+                                </div>
+                                <p id="modal-location"
+                                   class="text-blue-400 text-[10px] uppercase tracking-widest font-bold">--</p>
+                            </div>
+
+                            <div id="edit-identity" class="hidden space-y-2">
+                                <div class="relative">
+                                    <input type="text" id="edit-name-input" maxlength="20"
+                                           oninput="updateCharCount(this)"
+                                           class="w-full bg-white/10 border border-white/20 rounded-lg p-1.5 pr-10 text-white text-sm outline-none focus:border-blue-500">
+                                    <span id="char-counter"
+                                          class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-500">0/20</span>
+                                </div>
+                                <input type="text" id="edit-location-input" maxlength="15"
+                                       class="w-full bg-white/10 border border-white/20 rounded-lg p-1.5 text-blue-400 text-[10px] uppercase tracking-widest font-bold outline-none focus:border-blue-500">
+                                <div class="flex gap-2 mt-2">
+                                    <button onclick="saveIdentity()"
+                                            class="flex-1 py-1 bg-blue-600 text-white text-[9px] font-bold uppercase rounded-md hover:bg-blue-500">
+                                        Save
+                                    </button>
+                                    <button onclick="toggleEditIdentity(false)"
+                                            class="flex-1 py-1 bg-white/10 text-white text-[9px] font-bold uppercase rounded-md hover:bg-white/20">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

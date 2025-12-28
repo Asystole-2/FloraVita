@@ -491,6 +491,26 @@ def delete_plant(plant_id):
     flash("Plant removed from your garden.", "success")
     return redirect(url_for('dashboard'))
 
+@app.route("/update-plant-info/<int:plant_id>", methods=["POST"])
+@login_required
+def update_plant_info(plant_id):
+    data = request.get_json()
+    new_name = data.get("name")
+    new_location = data.get("location")
+
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("""
+            UPDATE plants 
+            SET name = %s, location = %s 
+            WHERE id = %s AND user_id = %s
+        """, (new_name, new_location, plant_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        cur.close()
 
 if __name__ == '__main__':
     app.run(debug=True)

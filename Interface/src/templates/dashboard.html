@@ -320,4 +320,121 @@ function filterPlants() {
         noResults.classList.add('hidden');
     }
 }
-</script>{% endblock %}
+
+/**
+ * Toggles between display and edit modes for name/location
+ */
+function toggleEditIdentity(isEditing) {
+    const display = document.getElementById('display-identity');
+    const edit = document.getElementById('edit-identity');
+
+    if (isEditing) {
+        document.getElementById('edit-name-input').value = document.getElementById('modal-title').innerText;
+        document.getElementById('edit-location-input').value = document.getElementById('modal-location').innerText;
+        display.classList.add('hidden');
+        edit.classList.remove('hidden');
+    } else {
+        display.classList.remove('hidden');
+        edit.classList.add('hidden');
+    }
+}
+
+/**
+ * Persists name and location changes to the database and updates UI instantly
+ */
+async function saveIdentity() {
+    const newName = document.getElementById('edit-name-input').value;
+    const newLoc = document.getElementById('edit-location-input').value;
+
+    if (!newName.trim()) {
+        alert("Plant name cannot be empty.");
+        return;
+    }
+
+    try {
+        const response = await fetch(`/update-plant-info/${currentPlantId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName, location: newLoc })
+        });
+
+        if (response.ok) {
+            //  Update Modal UI
+            document.getElementById('modal-title').innerText = newName;
+            document.getElementById('modal-location').innerText = newLoc;
+
+            //  Update Dashboard Card UI
+            const card = document.querySelector(`[data-card-id="${currentPlantId}"]`);
+            if (card) {
+                // Update visible text
+                card.querySelector('h3').innerText = newName;
+                const statusPill = card.querySelector('.status-pill span');
+                if (statusPill) statusPill.innerText = newLoc || 'Lab';
+
+                //  Update the 'onclick' attribute so reopening the modal shows new data; This parses the current function call and replaces the name and location arguments
+                const currentOnClick = card.getAttribute('onclick');
+
+                // Use a regex or a simple split/join to update the string arguments
+                const parts = currentOnClick.split("', '");
+                if (parts.length >= 2) {
+                    // Update Name (part of the first split)
+                    const firstPart = parts[0].split(", '");
+                    firstPart[1] = newName;
+                    parts[0] = firstPart.join(", '");
+
+                    // Update Location
+                    parts[1] = newLoc || 'Lab';
+
+                    const newOnClick = parts.join("', '");
+                    card.setAttribute('onclick', newOnClick);
+                }
+            }
+
+            toggleEditIdentity(false);
+        } else {
+            const errorData = await response.json();
+            alert("Error: " + (errorData.message || "Could not update identity"));
+        }
+    } catch (err) {
+        console.error("Identity Sync Error:", err);
+        alert("Network error: Failed to sync with garden database.");
+    }
+}
+
+/**
+ * Updates the visual character counter
+ */
+function updateCharCount(input) {
+    const counter = document.getElementById('char-counter');
+    counter.innerText = `${input.value.length}/20`;
+
+    // Change color as they reach the limit
+    if (input.value.length >= 18) {
+        counter.classList.replace('text-gray-500', 'text-amber-500');
+    } else {
+        counter.classList.replace('text-amber-500', 'text-gray-500');
+    }
+}
+
+/**
+ * Enhanced toggle to reset counters
+ */
+function toggleEditIdentity(isEditing) {
+    const display = document.getElementById('display-identity');
+    const edit = document.getElementById('edit-identity');
+    const nameInput = document.getElementById('edit-name-input');
+
+    if (isEditing) {
+        nameInput.value = document.getElementById('modal-title').innerText;
+        document.getElementById('edit-location-input').value = document.getElementById('modal-location').innerText;
+        updateCharCount(nameInput); // Initialize counter
+        display.classList.add('hidden');
+        edit.classList.remove('hidden');
+    } else {
+        display.classList.remove('hidden');
+        edit.classList.add('hidden');
+    }
+}
+</script>
+
+{% endblock %}
