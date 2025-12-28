@@ -67,19 +67,37 @@
 {% include "components/plant_modal.html" %}
 
 <script>
+// Global State
 let currentPlantId = null;
 let pumpActive = false;
 
-// Syncs Slider and Number input locally
+/**
+ * Logic to handle automatic photo updates when a file is selected
+ */
+function submitPhotoUpdate() {
+    const form = document.getElementById('modal-photo-form');
+    if (form) {
+        console.log("Photo change detected, submitting form...");
+        form.submit();
+    }
+}
+
+/**
+ * Synchronizes the Range Slider and Numeric Input locally
+ */
 function syncThresholdUI() {
     const slider = document.getElementById('threshold-slider');
     const num = document.getElementById('threshold-num');
 
-    slider.oninput = (e) => { num.value = e.target.value; };
-    num.oninput = (e) => { slider.value = e.target.value; };
+    if (slider && num) {
+        slider.oninput = (e) => { num.value = e.target.value; };
+        num.oninput = (e) => { slider.value = e.target.value; };
+    }
 }
 
-
+/**
+ * Persists the threshold to the database and updates the dashboard UI
+ */
 async function saveThresholdToDB() {
     if (!currentPlantId) return;
 
@@ -108,12 +126,10 @@ async function saveThresholdToDB() {
                 displaySpan.innerText = `Threshold: ${val}%`;
             }
 
-            // 2. Update the 'onclick' attribute so if the modal is reopened,
-            // it has the new threshold value immediately.
+            // 2. Update the 'onclick' attribute for persistence
             const card = document.querySelector(`[data-card-id="${currentPlantId}"]`);
             if (card) {
                 const currentOnClick = card.getAttribute('onclick');
-                // Regex to replace the last numeric argument (threshold)
                 const newOnClick = currentOnClick.replace(/, \d+\)$/, `, ${val})`);
                 card.setAttribute('onclick', newOnClick);
             }
@@ -131,6 +147,10 @@ async function saveThresholdToDB() {
         btn.innerHTML = originalIcon;
     }
 }
+
+/**
+ * Opens the plant modal and populates telemetry
+ */
 async function openPlantDetail(id, name, location, moisture, img, threshold) {
     currentPlantId = id;
     const modal = document.getElementById('plant-modal');
@@ -138,10 +158,12 @@ async function openPlantDetail(id, name, location, moisture, img, threshold) {
     const fallback = document.getElementById('modal-img-fallback');
 
     // Threshold Setup
-     const slider = document.getElementById('threshold-slider');
+    const slider = document.getElementById('threshold-slider');
     const num = document.getElementById('threshold-num');
-    slider.value = threshold;
-    num.value = threshold;
+    if (slider && num) {
+        slider.value = threshold;
+        num.value = threshold;
+    }
 
     // Call sync function after setting values
     setTimeout(() => syncThresholdUI(), 100);
@@ -152,7 +174,11 @@ async function openPlantDetail(id, name, location, moisture, img, threshold) {
     document.getElementById('modal-title').innerText = name;
     document.getElementById('modal-location').innerText = location;
     document.getElementById('modal-moisture').innerText = moisture + '%';
-    document.getElementById('modal-photo-form').action = `/update-plant-photo/${id}`;
+
+    const photoForm = document.getElementById('modal-photo-form');
+    if (photoForm) {
+        photoForm.action = `/update-plant-photo/${id}`;
+    }
 
     // Image logic
     fallback.classList.add('hidden');
@@ -160,19 +186,22 @@ async function openPlantDetail(id, name, location, moisture, img, threshold) {
     modalImg.src = img;
 
     // AI logic
-    document.querySelectorAll('.ai-content-compact').forEach(p => p.innerText = "Synthesizing data...");
+    document.querySelectorAll('.ai-content-compact').forEach(p => p.innerText = "Synthesizing intel...");
     try {
         const response = await fetch(`/api/ai-tips/${id}`);
         const data = await response.json();
-        document.getElementById('ai-watering').innerText = data.watering || "No data.";
-        document.getElementById('ai-lighting').innerText = data.lighting || "No data.";
-        document.getElementById('ai-fertilization').innerText = data.fertilization || "No data.";
-        document.getElementById('ai-other').innerText = data.other || "No data.";
+        document.getElementById('ai-watering').innerText = data.watering || "No strategy.";
+        document.getElementById('ai-lighting').innerText = data.lighting || "Analyzing light.";
+        document.getElementById('ai-fertilization').innerText = data.fertilization || "Checking nutrients.";
+        document.getElementById('ai-other').innerText = data.other || "Maintenance logs clear.";
     } catch (err) {
         document.querySelectorAll('.ai-content-compact').forEach(p => p.innerText = "Offline.");
     }
 }
 
+/**
+ * Manual Irrigation Toggle
+ */
 function togglePump() {
     const btn = document.getElementById('pump-control-btn');
     pumpActive = !pumpActive;
@@ -185,6 +214,9 @@ function togglePump() {
     }
 }
 
+/**
+ * Custom Deletion Modal Logic
+ */
 function confirmDeletion(type) {
     const confirmModal = document.getElementById('confirm-modal');
     const actionBtn = document.getElementById('confirm-action-btn');
@@ -207,13 +239,20 @@ function confirmDeletion(type) {
     }
 }
 
+// Global Helpers
 function handleImgError() {
     document.getElementById('modal-img').classList.add('hidden');
     document.getElementById('modal-img-fallback').classList.remove('hidden');
 }
 
-function closeModal() { document.getElementById('plant-modal').classList.add('hidden'); document.body.style.overflow = 'auto'; }
-function closeConfirm() { document.getElementById('confirm-modal').classList.add('hidden'); }
+function closeModal() {
+    document.getElementById('plant-modal').classList.add('hidden');
+    document.body.style.overflow = 'auto';
+}
+
+function closeConfirm() {
+    document.getElementById('confirm-modal').classList.add('hidden');
+}
 
 function toggleAccordion(btn) {
     const panel = btn.nextElementSibling;
@@ -221,7 +260,9 @@ function toggleAccordion(btn) {
     const isOpen = panel.classList.contains('open');
     document.querySelectorAll('.accordion-panel').forEach(p => p.classList.remove('open'));
     document.querySelectorAll('.fa-plus').forEach(i => i.style.transform = "rotate(0deg)");
-    if (!isOpen) { panel.classList.add('open'); icon.style.transform = "rotate(45deg)"; }
+    if (!isOpen) {
+        panel.classList.add('open');
+        icon.style.transform = "rotate(45deg)";
+    }
 }
-</script>
-{% endblock %}
+</script>{% endblock %}
