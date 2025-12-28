@@ -12,58 +12,87 @@
 </div>
 
 <div class="mt-8 relative z-10 px-6">
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <h1 class="text-4xl font-black tracking-tighter text-white">My Garden</h1>
+
+        {% if plants %}
+        <div class="relative w-full md:w-72">
+            <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <input type="text"
+                   id="plant-search"
+                   onkeyup="filterPlants()"
+                   placeholder="Search plants..."
+                   class="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-11 pr-4 text-white text-xs outline-none focus:ring-1 focus:ring-blue-500/50 transition-all placeholder:text-gray-500">
+        </div>
+        {% endif %}
     </div>
 
-    <div class="garden-grid pb-10">
-        {% for plant in plants %}
-        <div class="plant-card group relative"
-             data-card-id="{{ plant.id }}"
-     onclick="openPlantDetail({{ plant.id }}, '{{ plant.name }}', '{{ plant.location or 'Lab' }}', '{{ plant.last_moisture or 0 }}', '{{ url_for('static', filename='uploads/' + (plant.image_url or 'default_plant.png')) }}', {{ plant.moisture_threshold or 30 }})">
+    <div id="no-results" class="hidden text-center py-20">
+        <i class="fas fa-seedling text-gray-600 text-4xl mb-4"></i>
+        <p class="text-gray-500 uppercase tracking-widest text-[10px] font-bold">No botanical matches found</p>
+    </div>
 
+    <div class="garden-grid pb-10" id="garden-container">
+        {% if plants %}
+            {% for plant in plants %}
+            <div class="plant-card group relative"
+                 data-card-id="{{ plant.id }}"
+                 onclick="openPlantDetail({{ plant.id }}, '{{ plant.name }}', '{{ plant.location or 'Lab' }}', '{{ plant.last_moisture or 0 }}', '{{ url_for('static', filename='uploads/' + (plant.image_url or 'default_plant.png')) }}', {{ plant.moisture_threshold or 30 }})">
 
-            <div class="relative overflow-hidden h-48 bg-white/5 flex items-center justify-center">
-                <i class="fas fa-leaf text-blue-500/20 text-4xl absolute z-0"></i>
-                <img src="{{ url_for('static', filename='uploads/' + (plant.image_url or 'default_plant.png')) }}"
-                     class="plant-img relative z-10 transition-transform duration-700 group-hover:scale-110"
-                     onerror="this.style.display='none'">
-                <div class="absolute inset-0 z-20 bg-gradient-to-t from-[#020617] to-transparent opacity-60"></div>
-                <div class="absolute top-4 right-4 z-30 status-pill bg-black/40 backdrop-blur-md border-white/10">
-                    <i class="fas fa-map-marker-alt text-[10px] mr-1"></i>
-                    <span class="text-[9px] uppercase tracking-widest">{{ plant.location or 'Lab' }}</span>
+                <div class="relative overflow-hidden h-48 bg-white/5 flex items-center justify-center">
+                    <i class="fas fa-leaf text-blue-500/20 text-4xl absolute z-0"></i>
+                    <img src="{{ url_for('static', filename='uploads/' + (plant.image_url or 'default_plant.png')) }}"
+                         class="plant-img relative z-10 transition-transform duration-700 group-hover:scale-110"
+                         onerror="this.style.display='none'">
+                    <div class="absolute inset-0 z-20 bg-gradient-to-t from-[#020617] to-transparent opacity-60"></div>
+                    <div class="absolute top-4 right-4 z-30 status-pill bg-black/40 backdrop-blur-md border-white/10">
+                        <i class="fas fa-map-marker-alt text-[10px] mr-1"></i>
+                        <span class="text-[9px] uppercase tracking-widest">{{ plant.location or 'Lab' }}</span>
+                    </div>
+                </div>
+
+                <div class="p-6">
+                    <h3 class="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">{{ plant.name }}</h3>
+                    <p class="text-[10px] text-gray-500 uppercase tracking-widest mt-1 mb-4">
+                        Last Sync: {{ plant.last_update.strftime('%H:%M') if plant.last_update else 'N/A' }}
+                    </p>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center text-[11px] font-bold uppercase tracking-widest">
+                            <span class="text-gray-400">Moisture</span>
+                            <span class="text-blue-400">{{ plant.last_moisture or 0 }}%</span>
+                        </div>
+                        <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+                            <div class="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_10px_#3b82f6] transition-all duration-1000"
+                                 style="width: {{ plant.last_moisture or 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
+                        <div class="flex justify-between items-center">
+                            <span id="threshold-display-{{ plant.id }}" class="text-[9px] text-gray-500 uppercase tracking-tighter">
+                                Threshold: {{ plant.moisture_threshold }}%
+                            </span>
+                            <i class="fas fa-chevron-right text-blue-500 text-xs"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <div class="p-6">
-                <h3 class="text-xl font-bold text-white group-hover:text-blue-400 transition-colors">{{ plant.name }}</h3>
-                <p class="text-[10px] text-gray-500 uppercase tracking-widest mt-1 mb-4">
-                    Last Sync: {{ plant.last_update.strftime('%H:%M') if plant.last_update else 'N/A' }}
+            {% endfor %}
+        {% else %}
+            <a href="{{ url_for('settings') }}" class="plant-card group relative flex flex-col items-center justify-center p-12 border-dashed border-2 border-white/10 hover:border-blue-500/50 transition-all">
+                <div class="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                    <i class="fas fa-plus text-blue-400 text-3xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white mb-2">Your Garden is Empty</h3>
+                <p class="text-gray-400 text-center text-xs max-w-[200px] leading-relaxed">
+                    Head to settings to register your first botanical device.
                 </p>
-                <div class="space-y-3">
-                    <div class="flex justify-between items-center text-[11px] font-bold uppercase tracking-widest">
-                        <span class="text-gray-400">Moisture</span>
-                        <span class="text-blue-400">{{ plant.last_moisture or 0 }}%</span>
-                    </div>
-                    <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
-                        <div class="h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_10px_#3b82f6] transition-all duration-1000"
-                             style="width: {{ plant.last_moisture or 0 }}%"></div>
-                    </div>
+                <div class="mt-6 px-6 py-2 bg-blue-600 rounded-full text-[10px] font-bold uppercase tracking-widest text-white">
+                    Register Plant
                 </div>
-                <div class="mt-4 pt-4 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-all duration-500 transform translate-y-2 group-hover:translate-y-0">
-                    <div class="flex justify-between items-center">
-                        <span id="threshold-display-{{ plant.id }}" class="text-[9px] text-gray-500 uppercase tracking-tighter">
-                    Threshold: {{ plant.moisture_threshold }}%
-                </span>
-                <i class="fas fa-chevron-right text-blue-500 text-xs"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
+            </a>
+        {% endif %}
     </div>
 </div>
-
 {% include "components/plant_modal.html" %}
 
 <script>
@@ -263,6 +292,32 @@ function toggleAccordion(btn) {
     if (!isOpen) {
         panel.classList.add('open');
         icon.style.transform = "rotate(45deg)";
+    }
+}
+
+function filterPlants() {
+    const query = document.getElementById('plant-search').value.toLowerCase();
+    const cards = document.querySelectorAll('.plant-card');
+    const noResults = document.getElementById('no-results');
+    let visibleCount = 0;
+
+    cards.forEach(card => {
+        // Find the plant name inside the card (h3 element)
+        const plantName = card.querySelector('h3').innerText.toLowerCase();
+
+        if (plantName.includes(query)) {
+            card.style.display = "";
+            visibleCount++;
+        } else {
+            card.style.display = "none";
+        }
+    });
+
+    // Show/Hide "No Results" message
+    if (visibleCount === 0) {
+        noResults.classList.remove('hidden');
+    } else {
+        noResults.classList.add('hidden');
     }
 }
 </script>{% endblock %}
