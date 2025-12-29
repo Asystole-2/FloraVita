@@ -86,7 +86,7 @@
     };
 
     /**
-     * POLLING: Updates UI for background/automated events every 30s
+     * POLLING: Updates UI for background/automated events every 1s
      */
     setInterval(async () => {
         try {
@@ -94,7 +94,7 @@
             const data = await response.json();
             renderBadges(data.count);
         } catch (e) { console.warn("Live status check failed."); }
-    }, 30000);
+    }, 1000);
 
     // Initial State Check
     const savedState = localStorage.getItem('floraVita_menu_state');

@@ -1,6 +1,6 @@
 import os
 import re
-from flask import Flask, render_template, redirect, request, session, flash, url_for
+from flask import Flask, render_template, redirect, request, session, flash, url_for, jsonify
 from flask_mysqldb import MySQL
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -257,10 +257,7 @@ def notifications():
     user_id = session.get("user_id")
     cur = mysql.connection.cursor()
     try:
-        # Mark all as read upon visiting the alerts page
-        cur.execute("UPDATE user_notifications SET is_read = TRUE WHERE user_id = %s", (user_id,))
-        mysql.connection.commit()
-
+        # Fetch the 50 most recent notifications without changing their read status
         cur.execute("""
                     SELECT n.*, p.name as plant_name
                     FROM user_notifications n
@@ -269,7 +266,10 @@ def notifications():
                     ORDER BY n.created_at DESC LIMIT 50
                     """, (user_id,))
         user_notifications = cur.fetchall()
-        return render_template("notifications.html", active_page="notifications", notifications=user_notifications)
+
+        return render_template("notifications.html",
+                               active_page="notifications",
+                               notifications=user_notifications)
     finally:
         cur.close()
 
@@ -284,6 +284,200 @@ def get_unread_count():
     cur.close()
     return {"count": result['count'] if result else 0}
 
+
+# --- Notification Management Routes ---
+
+@app.route("/notifications/mark-read/<int:note_id>", methods=["POST"])
+@login_required
+def mark_notification_read(note_id):
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE user_notifications SET is_read = TRUE WHERE id = %s AND user_id = %s",
+                    (note_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success", "message": "Notification marked as read", "note_id": note_id}
+    except Exception as e:
+        print(f"Error in mark_notification_read: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-unread/<int:note_id>", methods=["POST"])
+@login_required
+def mark_notification_unread(note_id):
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE user_notifications SET is_read = FALSE WHERE id = %s AND user_id = %s",
+                    (note_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success", "message": "Notification marked as unread", "note_id": note_id}
+    except Exception as e:
+        print(f"Error in mark_notification_unread: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-all-read", methods=["POST"])
+@login_required
+def mark_all_notifications_read():
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE user_notifications SET is_read = TRUE WHERE user_id = %s", (session['user_id'],))
+        mysql.connection.commit()
+
+        # Get count of updated notifications
+        cur.execute("SELECT COUNT(*) as count FROM user_notifications WHERE user_id = %s", (session['user_id'],))
+        count = cur.fetchone()['count']
+
+        return {"status": "success", "message": f"All notifications marked as read", "count": count}
+    except Exception as e:
+        print(f"Error in mark_all_notifications_read: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/delete/<int:note_id>", methods=["POST"])
+@login_required
+def delete_notification(note_id):
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("DELETE FROM user_notifications WHERE id = %s AND user_id = %s", (note_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success", "message": "Notification deleted", "note_id": note_id}
+    except Exception as e:
+        print(f"Error in delete_notification: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/delete-bulk", methods=["POST"])
+@login_required
+def delete_notifications_bulk():
+    cur = None
+    try:
+        ids = request.form.getlist('notification_ids')
+        if not ids:
+            return {"status": "error", "message": "No notification IDs provided"}, 400
+
+        cur = mysql.connection.cursor()
+        format_strings = ','.join(['%s'] * len(ids))
+        cur.execute(f"DELETE FROM user_notifications WHERE id IN ({format_strings}) AND user_id = %s",
+                    tuple(ids) + (session['user_id'],))
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Successfully deleted {len(ids)} notifications", "count": len(ids)}
+    except Exception as e:
+        print(f"Error in delete_notifications_bulk: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-bulk-read", methods=["POST"])
+@login_required
+def mark_notifications_bulk_read():
+    cur = None
+    try:
+        # Support both JSON and form data
+        if request.is_json:
+            data = request.get_json()
+            if not data:
+                return {"status": "error", "message": "No data provided"}, 400
+            ids = data.get('notification_ids', [])
+        else:
+            ids = request.form.getlist('notification_ids')
+
+        if not ids:
+            return {"status": "error", "message": "No notification IDs provided"}, 400
+
+        cur = mysql.connection.cursor()
+        placeholders = ','.join(['%s'] * len(ids))
+        query = f"UPDATE user_notifications SET is_read = TRUE WHERE id IN ({placeholders}) AND user_id = %s"
+        params = tuple(ids) + (session['user_id'],)
+
+        cur.execute(query, params)
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Marked {len(ids)} notifications as read", "count": len(ids)}
+    except Exception as e:
+        print(f"Error in mark_notifications_bulk_read: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-bulk-unread", methods=["POST"])
+@login_required
+def mark_notifications_bulk_unread():
+    cur = None
+    try:
+        # Support both JSON and form data
+        if request.is_json:
+            data = request.get_json()
+            if not data:
+                return {"status": "error", "message": "No data provided"}, 400
+            ids = data.get('notification_ids', [])
+        else:
+            ids = request.form.getlist('notification_ids')
+
+        if not ids:
+            return {"status": "error", "message": "No notification IDs provided"}, 400
+
+        cur = mysql.connection.cursor()
+        format_strings = ','.join(['%s'] * len(ids))
+        cur.execute(f"UPDATE user_notifications SET is_read = FALSE WHERE id IN ({format_strings}) AND user_id = %s",
+                    tuple(ids) + (session['user_id'],))
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Marked {len(ids)} notifications as unread", "count": len(ids)}
+    except Exception as e:
+        print(f"Error in mark_notifications_bulk_unread: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/delete-all", methods=["POST"])
+@login_required
+def delete_all_notifications():
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        # Get count before deletion for message
+        cur.execute("SELECT COUNT(*) as count FROM user_notifications WHERE user_id = %s", (session['user_id'],))
+        count_result = cur.fetchone()
+        count = count_result['count'] if count_result else 0
+
+        # Delete all notifications
+        cur.execute("DELETE FROM user_notifications WHERE user_id = %s", (session['user_id'],))
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Deleted all notifications", "count": count}
+    except Exception as e:
+        print(f"Error in delete_all_notifications: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
 
 @app.route("/update-threshold/<int:plant_id>", methods=["POST"])
 @login_required
