@@ -1,20 +1,31 @@
 <div id="nav-container" class="fixed bottom-6 left-6 z-[2000]">
+    <nav id="main-nav"
+         class="glass-card rounded-full p-2 flex items-center shadow-2xl border-white/10 overflow-hidden nav-no-transition transition-all duration-500 {% if unread_count > 0 %}nav-glow{% endif %}"
+         style="max-width: 56px;">
 
-    <nav id="main-nav" class="glass-card rounded-full p-2 flex items-center shadow-2xl border-white/10 overflow-hidden nav-no-transition transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1)" style="max-width: 56px;">
-
-        <button onclick="toggleMenu()" class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500/10 text-blue-400 shrink-0 hover:bg-blue-500/20 transition-all">
+        <button onclick="toggleMenu()" class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-500/10 text-blue-400 shrink-0 hover:bg-blue-500/20 transition-all relative">
             <i id="toggle-icon" class="fas fa-bars transition-all duration-300"></i>
+            <div id="collapsed-badge-container">
+                {% if unread_count > 0 %}
+                    <div class="notification-dot" id="collapsed-badge">{{ unread_count }}</div>
+                {% endif %}
+            </div>
         </button>
 
         <div id="nav-links" class="flex items-center gap-6 px-4 opacity-0 pointer-events-none transition-all duration-300 transform -translate-x-4">
             <a href="{{ url_for('dashboard') }}" class="flex flex-col items-center group">
-                <i class="fas fa-home-alt text-lg {% if active_page == 'dashboard' %}text-blue-400{% else %}text-gray-500 group-hover:text-gray-300{% endif %}"></i>
-                <span class="text-[8px] font-black uppercase tracking-widest mt-1 {% if active_page == 'dashboard' %}text-blue-400{% else %}text-gray-500{% endif %}">Home</span>
+                <i class="fas fa-home-alt text-lg {% if active_page == 'dashboard' %}text-blue-400{% else %}text-gray-500{% endif %}"></i>
+                <span class="text-[8px] font-black uppercase tracking-widest mt-1">Home</span>
             </a>
 
-            <a href="{{ url_for('notifications') }}" class="flex flex-col items-center group">
-                <i class="fas fa-bell text-lg {% if active_page == 'notifications' %}text-blue-400{% else %}text-gray-500 group-hover:text-gray-300{% endif %}"></i>
-                <span class="text-[8px] font-black uppercase tracking-widest mt-1 {% if active_page == 'notifications' %}text-blue-400{% else %}text-gray-500{% endif %}">Alerts</span>
+            <a href="{{ url_for('notifications') }}" class="flex flex-col items-center group relative">
+                <i class="fas fa-bell text-lg {% if active_page == 'notifications' %}text-blue-400{% else %}text-gray-500{% endif %}"></i>
+                <div id="expanded-badge-container">
+                    {% if unread_count > 0 %}
+                        <div class="notification-dot">{{ unread_count }}</div>
+                    {% endif %}
+                </div>
+                <span class="text-[8px] font-black uppercase tracking-widest mt-1">Alerts</span>
             </a>
 
             <a href="{{ url_for('settings') }}" class="flex flex-col items-center group">
@@ -28,51 +39,98 @@
                 <i class="fas fa-sign-out-alt text-lg text-red-500/60 hover:text-red-400"></i>
                 <span class="text-[8px] font-black uppercase tracking-widest mt-1 text-red-500/60">Exit</span>
             </a>
+
         </div>
     </nav>
 </div>
-
 <script>
-    const nav = document.getElementById('main-nav');
-    const links = document.getElementById('nav-links');
-    const icon = document.getElementById('toggle-icon');
+(function() {
+    const menuNav = document.getElementById('main-nav');
+    const menuLinks = document.getElementById('nav-links');
+    const menuIcon = document.getElementById('toggle-icon');
 
-    // 1. Immediate State Check (Prevents Flash)
-    (function initMenu() {
-        const savedState = localStorage.getItem('floraVita_menu_state');
-        if (savedState === 'expanded') {
-            nav.style.maxWidth = '400px';
-            links.style.opacity = '1';
-            links.style.pointerEvents = 'auto';
-            links.style.transform = 'translateX(0)';
-            icon.classList.replace('fa-bars', 'fa-times');
-            nav.classList.add('expanded');
+    if (!menuNav || !menuIcon) return;
+
+    /**
+     * Updates the DOM for real-time notifications
+     */
+    window.renderBadges = function(count) {
+        const collapsedCont = document.getElementById('collapsed-badge-container');
+        const expandedCont = document.getElementById('expanded-badge-container');
+
+        if (count > 0) {
+            menuNav.classList.add('nav-glow');
+            const badgeHtml = `<div class="notification-dot">${count}</div>`;
+            const collapsedBadgeHtml = `<div class="notification-dot" id="collapsed-badge">${count}</div>`;
+
+            collapsedCont.innerHTML = collapsedBadgeHtml;
+            expandedCont.innerHTML = badgeHtml;
+
+            // Adjust display based on current menu state
+            const cb = document.getElementById('collapsed-badge');
+            if (cb) cb.style.display = menuNav.classList.contains('expanded') ? 'none' : 'flex';
+        } else {
+            menuNav.classList.remove('nav-glow');
+            collapsedCont.innerHTML = '';
+            expandedCont.innerHTML = '';
         }
-        // Force a tiny delay before allowing transitions again
-        setTimeout(() => {
-            nav.classList.remove('nav-no-transition');
-        }, 50);
-    })();
+    };
 
-    function toggleMenu() {
-        if (nav.classList.contains('expanded')) {
-            // Collapse
-            nav.style.maxWidth = '56px';
-            links.style.opacity = '0';
-            links.style.pointerEvents = 'none';
-            links.style.transform = 'translateX(-16px)';
-            icon.classList.replace('fa-times', 'fa-bars');
-            nav.classList.remove('expanded');
+    /**
+     * INCREMENTER: Used after user actions (save threshold/pump)
+     */
+    window.incrementNotificationBadge = function() {
+        const existingBadge = document.querySelector('.notification-dot');
+        let currentCount = existingBadge ? parseInt(existingBadge.innerText) : 0;
+        renderBadges(currentCount + 1);
+    };
+
+    /**
+     * POLLING: Updates UI for background/automated events every 30s
+     */
+    setInterval(async () => {
+        try {
+            const response = await fetch('/api/unread-count');
+            const data = await response.json();
+            renderBadges(data.count);
+        } catch (e) { console.warn("Live status check failed."); }
+    }, 30000);
+
+    // Initial State Check
+    const savedState = localStorage.getItem('floraVita_menu_state');
+    if (savedState === 'expanded') {
+        menuNav.style.maxWidth = '400px';
+        menuNav.classList.add('expanded');
+        menuLinks.style.opacity = '1';
+        menuLinks.style.pointerEvents = 'auto';
+        menuLinks.style.transform = 'translateX(0)';
+        menuIcon.className = 'fas fa-times transition-all duration-300';
+    }
+
+    setTimeout(() => { menuNav.classList.remove('nav-no-transition'); }, 50);
+
+    window.toggleMenu = function() {
+        const badge = document.getElementById('collapsed-badge');
+        if (menuNav.classList.contains('expanded')) {
+            menuNav.style.maxWidth = '56px';
+            menuLinks.style.opacity = '0';
+            menuLinks.style.pointerEvents = 'none';
+            menuLinks.style.transform = 'translateX(-16px)';
+            menuIcon.className = 'fas fa-bars transition-all duration-300';
+            menuNav.classList.remove('expanded');
+            if (badge) badge.style.display = 'flex';
             localStorage.setItem('floraVita_menu_state', 'collapsed');
         } else {
-            // Expand
-            nav.style.maxWidth = '400px';
-            links.style.opacity = '1';
-            links.style.pointerEvents = 'auto';
-            links.style.transform = 'translateX(0)';
-            icon.classList.replace('fa-bars', 'fa-times');
-            nav.classList.add('expanded');
+            menuNav.style.maxWidth = '400px';
+            menuLinks.style.opacity = '1';
+            menuLinks.style.pointerEvents = 'auto';
+            menuLinks.style.transform = 'translateX(0)';
+            menuIcon.className = 'fas fa-times transition-all duration-300';
+            menuNav.classList.add('expanded');
+            menuNav.classList.remove('nav-glow');
+            if (badge) badge.style.display = 'none';
             localStorage.setItem('floraVita_menu_state', 'expanded');
         }
-    }
+    };
+})();
 </script>
