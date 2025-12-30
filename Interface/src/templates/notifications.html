@@ -32,12 +32,12 @@
 
                 <div class="flex gap-3">
                     {% if notifications %}
-                    <button onclick="handleMarkAllReadDirect()"
+                    <button onclick="showCustomConfirm('mark-all-read', null, 'Mark all notifications as read?', 'This will update all alerts to read status.', 'blue')"
                             class="group flex items-center gap-2 px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-blue-400 transition-all">
                         <i class="fas fa-check-double group-hover:scale-110 transition-transform"></i>
                         Mark All Read
                     </button>
-                    <button onclick="showConfirm('delete-all')"
+                    <button onclick="showCustomConfirm('delete-all', null, 'Purge all notifications?', 'This will permanently clear all system alerts.', 'red')"
                             class="group flex items-center gap-2 px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-2xl text-[10px] font-bold uppercase tracking-widest text-red-400 transition-all">
                         <i class="fas fa-trash-alt group-hover:scale-110 transition-transform"></i>
                         Purge All
@@ -113,7 +113,8 @@
             <div class="glass-card notification-item p-6 rounded-[2rem] border border-white/5 relative overflow-hidden group {% if n.is_read %}opacity-50 grayscale-[0.5]{% endif %}"
                  data-event="{{ n.event_type }}"
                  data-plant="{{ n.plant_name | lower if n.plant_name else 'system' }}"
-                 data-read="{{ 'true' if n.is_read else 'false' }}">
+                 data-read="{{ 'true' if n.is_read else 'false' }}"
+                 data-note-id="{{ n.id }}">
                 <!-- Selection Checkbox -->
                 <div class="absolute top-4 left-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     <input type="checkbox" name="notification_ids" value="{{ n.id }}"
@@ -139,11 +140,11 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onclick="handleIndividualToggle(event, {{ n.id }}, {{ n.is_read|lower }})"
+                        <button onclick="toggleNotificationReadStatus({{ n.id }}, '{{ 'true' if n.is_read else 'false' }}')"
                                 class="w-10 h-10 rounded-xl bg-white/5 hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 flex items-center justify-center transition-all">
                             <i class="fas {% if n.is_read %}fa-envelope-open{% else %}fa-envelope{% endif %}"></i>
                         </button>
-                        <button onclick="showConfirm('delete', {{ n.id }})"
+                        <button onclick="showCustomConfirm('delete', {{ n.id }}, 'Delete notification?', 'This action cannot be undone.', 'red')"
                                 class="w-10 h-10 rounded-xl bg-white/5 hover:bg-red-500/20 text-gray-400 hover:text-red-400 flex items-center justify-center transition-all">
                             <i class="fas fa-trash-alt"></i>
                         </button>
@@ -184,19 +185,21 @@
         </div>
         <div class="h-4 w-px bg-white/10"></div>
         <div class="flex items-center gap-2">
-            <button onclick="performBulkAction('delete')"
+            <button onclick="showCustomConfirm('delete-bulk', getSelectedIds(), `Delete selected notifications?`, `This will permanently delete ${getSelectedIds().length} notification${getSelectedIds().length > 1 ? 's' : ''}.`, 'red')"
                     class="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-[10px] font-bold uppercase tracking-widest text-red-400 hover:text-red-300 transition-all">
                 <i class="fas fa-trash-alt mr-1"></i> Delete
             </button>
 
             <!-- Show Mark Read button if any selected items are unread -->
-            <button id="mark-read-btn" onclick="performBulkAction('mark-read')"
+            <button id="mark-read-btn"
+                    onclick="showCustomConfirm('mark-read-bulk', getSelectedIds(), `Mark selected as read?`, `Mark ${getSelectedIds().length} notification${getSelectedIds().length > 1 ? 's' : ''} as read.`, 'blue')"
                     class="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-xl text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300 transition-all hidden">
                 <i class="fas fa-check-double mr-1"></i> Mark Read
             </button>
 
             <!-- Show Mark Unread button if any selected items are read -->
-            <button id="mark-unread-btn" onclick="performBulkAction('mark-unread')"
+            <button id="mark-unread-btn"
+                    onclick="showCustomConfirm('mark-unread-bulk', getSelectedIds(), `Mark selected as unread?`, `Mark ${getSelectedIds().length} notification${getSelectedIds().length > 1 ? 's' : ''} as unread.`, 'purple')"
                     class="px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 rounded-xl text-[10px] font-bold uppercase tracking-widest text-purple-400 hover:text-purple-300 transition-all hidden">
                 <i class="fas fa-envelope mr-1"></i> Mark Unread
             </button>
@@ -209,36 +212,20 @@
     </div>
 </div>
 
-<!-- Confirm Modal (updated for async operations) -->
-<div id="confirm-modal"
+<!-- Custom Confirmation Modal -->
+<div id="custom-confirm-modal"
      class="fixed inset-0 bg-black/80 backdrop-blur-md hidden z-[5000] flex items-center justify-center p-4">
     <div class="glass-card max-w-sm w-full p-8 rounded-3xl border border-white/10 text-center">
-        <div id="modal-icon" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"></div>
-        <h2 id="modal-title" class="text-xl font-bold text-white mb-2">Confirm Action</h2>
-        <p id="modal-text" class="text-xs text-gray-400 mb-8 leading-relaxed"></p>
+        <div id="custom-modal-icon" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"></div>
+        <h2 id="custom-modal-title" class="text-xl font-bold text-white mb-2"></h2>
+        <p id="custom-modal-text" class="text-xs text-gray-400 mb-8 leading-relaxed"></p>
 
-        <!-- Keep form only for bulk delete -->
-        <form id="modal-form" method="POST" class="hidden">
-            <div id="bulk-ids-container"></div>
-            <div class="flex gap-3">
-                <button type="button" onclick="closeConfirm()"
-                        class="flex-1 py-3 rounded-xl bg-white/5 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-white/10 transition-all">
-                    Cancel
-                </button>
-                <button id="modal-confirm-btn" type="submit"
-                        class="flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white transition-all">
-                    Confirm
-                </button>
-            </div>
-        </form>
-
-        <!-- Async actions container -->
-        <div id="modal-async-actions" class="flex gap-3">
-            <button type="button" onclick="closeConfirm()"
+        <div class="flex gap-3">
+            <button type="button" onclick="closeCustomConfirm()"
                     class="flex-1 py-3 rounded-xl bg-white/5 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-white/10 transition-all">
                 Cancel
             </button>
-            <button id="modal-async-confirm-btn" type="button"
+            <button id="custom-modal-confirm-btn" type="button"
                     class="flex-1 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest text-white transition-all">
                 Confirm
             </button>
@@ -342,24 +329,129 @@
         return Array.from(selectedNotifications);
     }
 
-    async function performBulkAction(action) {
-        const selectedIds = getSelectedIds();
-        if (selectedIds.length === 0) return;
+    /**
+     * Custom Confirmation Modal System
+     */
+    let currentAction = null;
+    let currentIds = null;
+    let currentNoteId = null;
 
-        if (action === 'delete') {
-            showBulkConfirm('delete-bulk', selectedIds);
-        } else if (action === 'mark-read') {
-            if (confirm(`Mark ${selectedIds.length} notification${selectedIds.length > 1 ? 's' : ''} as read?`)) {
-                await markBulkAsRead(selectedIds);
+    function showCustomConfirm(action, ids, title, text, color) {
+        currentAction = action;
+        currentIds = ids;
+        currentNoteId = ids; // For single actions, ids is the noteId
+
+        const modal = document.getElementById('custom-confirm-modal');
+        const modalTitle = document.getElementById('custom-modal-title');
+        const modalText = document.getElementById('custom-modal-text');
+        const modalIcon = document.getElementById('custom-modal-icon');
+        const confirmBtn = document.getElementById('custom-modal-confirm-btn');
+
+        modalTitle.innerText = title;
+        modalText.innerText = text;
+
+        // Set icon and button color based on action type
+        let iconClass = '';
+        let btnClass = '';
+        let btnText = 'Confirm';
+
+        if (color === 'red') {
+            iconClass = 'bg-red-500/10 text-red-400';
+            btnClass = 'bg-red-600 hover:bg-red-500';
+            btnText = action.includes('delete') ? 'Delete' : 'Confirm';
+        } else if (color === 'blue') {
+            iconClass = 'bg-blue-500/10 text-blue-400';
+            btnClass = 'bg-blue-600 hover:bg-blue-500';
+            btnText = 'Confirm';
+        } else if (color === 'purple') {
+            iconClass = 'bg-purple-500/10 text-purple-400';
+            btnClass = 'bg-purple-600 hover:bg-purple-500';
+            btnText = 'Confirm';
+        }
+
+        // Set icon
+        modalIcon.className = `w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${iconClass}`;
+
+        if (action.includes('delete')) {
+            modalIcon.innerHTML = '<i class="fas fa-trash-alt text-2xl"></i>';
+        } else if (action.includes('mark')) {
+            modalIcon.innerHTML = '<i class="fas fa-check-double text-2xl"></i>';
+        }
+
+        // Set button
+        confirmBtn.className = `flex-1 py-3 rounded-xl ${btnClass} text-[10px] font-bold uppercase tracking-widest text-white transition-all`;
+        confirmBtn.innerText = btnText;
+
+        // Set up confirmation handler
+        confirmBtn.onclick = async function () {
+            await handleConfirmedAction();
+            closeCustomConfirm();
+        };
+
+        modal.classList.remove('hidden');
+    }
+
+    async function handleConfirmedAction() {
+        if (!currentAction) return;
+
+        try {
+            if (currentAction === 'mark-all-read') {
+                await handleMarkAllRead();
+            } else if (currentAction === 'delete-all') {
+                await handleDeleteAllNotifications();
+            } else if (currentAction === 'delete') {
+                await handleDeleteNotification(currentNoteId);
+            } else if (currentAction === 'delete-bulk') {
+                await handleBulkDelete(currentIds);
+            } else if (currentAction === 'mark-read-bulk') {
+                await handleBulkMarkRead(currentIds);
+            } else if (currentAction === 'mark-unread-bulk') {
+                await handleBulkMarkUnread(currentIds);
             }
-        } else if (action === 'mark-unread') {
-            if (confirm(`Mark ${selectedIds.length} notification${selectedIds.length > 1 ? 's' : ''} as unread?`)) {
-                await markBulkAsUnread(selectedIds);
-            }
+        } catch (error) {
+            console.error("Error handling confirmed action:", error);
+            showToast("An error occurred. Please try again.", 'error');
         }
     }
 
-    async function markBulkAsRead(ids) {
+    async function handleBulkDelete(ids) {
+        try {
+            // Create form data for bulk delete
+            const formData = new FormData();
+            ids.forEach(id => formData.append('notification_ids', id));
+
+            const response = await fetch("{{ url_for('delete_notifications_bulk') }}", {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                // Remove notifications from the DOM
+                ids.forEach(id => {
+                    const card = document.querySelector(`.bulk-checkbox[value="${id}"]`)?.closest('.notification-item');
+                    if (card) card.remove();
+                });
+
+                showToast(result.message || `Deleted ${ids.length} notifications`, 'success');
+                clearSelection();
+
+                // Check if list is now empty
+                const remainingItems = document.querySelectorAll('.notification-item');
+                if (remainingItems.length === 0) {
+                    setTimeout(() => location.reload(), 1000);
+                }
+            } else {
+                showToast(result.message || "Failed to delete notifications", 'error');
+            }
+        } catch (error) {
+            console.error("Error deleting notifications:", error);
+            showToast("Network error. Please try again.", 'error');
+        }
+    }
+
+    async function handleBulkMarkRead(ids) {
         try {
             const response = await fetch("{{ url_for('mark_notifications_bulk_read') }}", {
                 method: 'POST',
@@ -381,10 +473,7 @@
                     }
                 });
 
-                // Show success message
                 showToast(result.message || `Marked ${ids.length} notifications as read`, 'success');
-
-                // Clear selection and hide bulk action bar
                 clearSelection();
             } else {
                 showToast(result.message || "Failed to mark notifications as read", 'error');
@@ -395,7 +484,7 @@
         }
     }
 
-    async function markBulkAsUnread(ids) {
+    async function handleBulkMarkUnread(ids) {
         try {
             const response = await fetch("{{ url_for('mark_notifications_bulk_unread') }}", {
                 method: 'POST',
@@ -417,10 +506,7 @@
                     }
                 });
 
-                // Show success message
                 showToast(result.message || `Marked ${ids.length} notifications as unread`, 'success');
-
-                // Clear selection and hide bulk action bar
                 clearSelection();
             } else {
                 showToast(result.message || "Failed to mark notifications as unread", 'error');
@@ -431,16 +517,69 @@
         }
     }
 
+    function closeCustomConfirm() {
+        const modal = document.getElementById('custom-confirm-modal');
+        const confirmBtn = document.getElementById('custom-modal-confirm-btn');
+
+        // Reset
+        currentAction = null;
+        currentIds = null;
+        currentNoteId = null;
+        confirmBtn.onclick = null;
+
+        modal.classList.add('hidden');
+    }
+
+
+    /**
+     * Individual Notification Handlers
+     */
+    async function toggleNotificationReadStatus(noteId, isCurrentlyRead) {
+        // isCurrentlyRead is string 'true' or 'false'
+        const endpoint = isCurrentlyRead === 'true' ?
+            `/notifications/mark-unread/${noteId}` :
+            `/notifications/mark-read/${noteId}`;
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                const card = document.querySelector(`[data-note-id="${noteId}"]`);
+                if (card) {
+                    // Toggle the state
+                    const newState = isCurrentlyRead === 'true' ? 'false' : 'true';
+                    updateCardReadStatus(card, newState);
+                }
+                showToast(result.message || "Notification status updated", 'success');
+            } else {
+                showToast(result.message || "Failed to update notification", 'error');
+            }
+        } catch (error) {
+            console.error("Error updating notification:", error);
+            showToast("Network error. Please try again.", 'error');
+        }
+    }
+
     function updateCardReadStatus(card, isRead) {
-        card.setAttribute('data-read', isRead.toString());
+        // isRead is string 'true' or 'false'
+        const noteId = card.getAttribute('data-note-id');
+        card.setAttribute('data-read', isRead);
 
         // Update visual indicators
         const statusIndicator = card.querySelector('.absolute.left-0');
         const newBadge = card.querySelector('.bg-blue-500\\/20');
-        const readBtn = card.querySelector('button[onclick*="handleIndividualToggle"]');
+        const readBtn = card.querySelector('button[onclick*="toggleNotificationReadStatus"]');
         const readBtnIcon = readBtn?.querySelector('i');
 
-        if (isRead) {
+        if (isRead === 'true') {
             // Now read
             card.classList.add('opacity-50', 'grayscale-[0.5]');
             if (statusIndicator) {
@@ -451,6 +590,8 @@
             if (readBtnIcon) {
                 readBtnIcon.className = 'fas fa-envelope-open';
             }
+            // Update onclick to mark unread
+            readBtn.setAttribute('onclick', `toggleNotificationReadStatus(${noteId}, 'true')`);
         } else {
             // Now unread
             card.classList.remove('opacity-50', 'grayscale-[0.5]');
@@ -461,48 +602,104 @@
             if (readBtnIcon) {
                 readBtnIcon.className = 'fas fa-envelope';
             }
+            // Update onclick to mark read
+            readBtn.setAttribute('onclick', `toggleNotificationReadStatus(${noteId}, 'false')`);
         }
     }
 
-    function showBulkConfirm(type, ids) {
-        const modal = document.getElementById('confirm-modal');
-        const modalForm = document.getElementById('modal-form');
-        const modalAsyncActions = document.getElementById('modal-async-actions');
-        const title = document.getElementById('modal-title');
-        const text = document.getElementById('modal-text');
-        const icon = document.getElementById('modal-icon');
-        const bulkIdsContainer = document.getElementById('bulk-ids-container');
-        const confirmBtn = document.getElementById('modal-confirm-btn');
-        const asyncConfirmBtn = document.getElementById('modal-async-confirm-btn');
+    async function handleMarkAllRead() {
+        try {
+            const response = await fetch("{{ url_for('mark_all_notifications_read') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
 
-        // Hide async actions, show form for bulk delete
-        modalAsyncActions.classList.add('hidden');
-        modalForm.classList.remove('hidden');
+            const result = await response.json();
 
-        // Clear previous hidden inputs
-        bulkIdsContainer.innerHTML = '';
+            if (response.ok && result.status === 'success') {
+                // Update all notifications to read status
+                const allCards = document.querySelectorAll('.notification-item');
+                allCards.forEach(card => {
+                    updateCardReadStatus(card, 'true');
+                });
 
-        // Add hidden inputs for each selected ID
-        ids.forEach(id => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'notification_ids';
-            input.value = id;
-            bulkIdsContainer.appendChild(input);
-        });
-
-        if (type === 'delete-bulk') {
-            title.innerText = "Delete Selected Items?";
-            text.innerText = `This will permanently delete ${ids.length} notification${ids.length > 1 ? 's' : ''}. This action cannot be undone.`;
-            modalForm.action = "{{ url_for('delete_notifications_bulk') }}";
-            icon.className = "w-16 h-16 bg-red-500/10 text-red-400 rounded-full flex items-center justify-center mx-auto mb-4";
-            icon.innerHTML = '<i class="fas fa-trash-alt text-2xl"></i>';
-
-            confirmBtn.className = "flex-1 py-3 rounded-xl bg-red-600 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-red-500 transition-all";
-            confirmBtn.innerText = "Delete";
+                showToast(result.message || "All notifications marked as read", 'success');
+            } else {
+                showToast(result.message || "Failed to mark all notifications as read", 'error');
+            }
+        } catch (error) {
+            console.error("Error marking all notifications as read:", error);
+            showToast("Network error. Please try again.", 'error');
         }
+    }
 
-        modal.classList.remove('hidden');
+    async function handleBulkMarkRead(ids) {
+        try {
+            const response = await fetch("{{ url_for('mark_notifications_bulk_read') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({notification_ids: ids})
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                // Update UI for each notification
+                ids.forEach(id => {
+                    const card = document.querySelector(`.bulk-checkbox[value="${id}"]`)?.closest('.notification-item');
+                    if (card) {
+                        updateCardReadStatus(card, 'true');
+                    }
+                });
+
+                showToast(result.message || `Marked ${ids.length} notifications as read`, 'success');
+                clearSelection();
+            } else {
+                showToast(result.message || "Failed to mark notifications as read", 'error');
+            }
+        } catch (error) {
+            console.error("Error marking notifications as read:", error);
+            showToast("Network error. Please try again.", 'error');
+        }
+    }
+
+    async function handleBulkMarkUnread(ids) {
+        try {
+            const response = await fetch("{{ url_for('mark_notifications_bulk_unread') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({notification_ids: ids})
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.status === 'success') {
+                // Update UI for each notification
+                ids.forEach(id => {
+                    const card = document.querySelector(`.bulk-checkbox[value="${id}"]`)?.closest('.notification-item');
+                    if (card) {
+                        updateCardReadStatus(card, 'false');
+                    }
+                });
+
+                showToast(result.message || `Marked ${ids.length} notifications as unread`, 'success');
+                clearSelection();
+            } else {
+                showToast(result.message || "Failed to mark notifications as unread", 'error');
+            }
+        } catch (error) {
+            console.error("Error marking notifications as unread:", error);
+            showToast("Network error. Please try again.", 'error');
+        }
     }
 
     /**
@@ -548,59 +745,8 @@
     }
 
     /**
-     * Confirmation Modal Management
+     * Action Handlers
      */
-    function showConfirm(type, id = null) {
-        const modal = document.getElementById('confirm-modal');
-        const modalForm = document.getElementById('modal-form');
-        const modalAsyncActions = document.getElementById('modal-async-actions');
-        const title = document.getElementById('modal-title');
-        const text = document.getElementById('modal-text');
-        const icon = document.getElementById('modal-icon');
-        const asyncConfirmBtn = document.getElementById('modal-async-confirm-btn');
-        const bulkIdsContainer = document.getElementById('bulk-ids-container');
-
-        // Hide form, show async actions
-        modalForm.classList.add('hidden');
-        modalAsyncActions.classList.remove('hidden');
-
-        // Clear bulk IDs container
-        bulkIdsContainer.innerHTML = '';
-
-        if (type === 'delete') {
-            title.innerText = "Delete Record?";
-            text.innerText = "This action is permanent.";
-            icon.className = "w-16 h-16 bg-red-500/10 text-red-400 rounded-full flex items-center justify-center mx-auto mb-4";
-            icon.innerHTML = '<i class="fas fa-trash-alt text-2xl"></i>';
-
-            asyncConfirmBtn.className = "flex-1 py-3 rounded-xl bg-red-600 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-red-500 transition-all";
-            asyncConfirmBtn.innerText = "Delete";
-            asyncConfirmBtn.onclick = async function () {
-                await handleDeleteNotification(id);
-                closeConfirm();
-            };
-        } else if (type === 'delete-all') {
-            title.innerText = "Purge All?";
-            text.innerText = "Clear system history.";
-            icon.className = "w-16 h-16 bg-red-600 text-white rounded-full flex items-center justify-center mx-auto mb-4";
-            icon.innerHTML = '<i class="fas fa-exclamation-triangle text-2xl"></i>';
-
-            asyncConfirmBtn.className = "flex-1 py-3 rounded-xl bg-red-600 text-[10px] font-bold uppercase tracking-widest text-white hover:bg-red-500 transition-all";
-            asyncConfirmBtn.innerText = "Purge All";
-            asyncConfirmBtn.onclick = async function () {
-                await handleDeleteAllNotifications();
-                closeConfirm();
-            };
-        }
-        modal.classList.remove('hidden');
-    }
-
-    async function handleMarkAllReadDirect() {
-        if (confirm("Mark all notifications as read?")) {
-            await handleMarkAllRead();
-        }
-    }
-
     async function handleMarkAllRead() {
         try {
             const response = await fetch("{{ url_for('mark_all_notifications_read') }}", {
@@ -644,7 +790,7 @@
 
             if (response.ok && result.status === 'success') {
                 // Remove the notification from the DOM
-                const card = document.querySelector(`.bulk-checkbox[value="${noteId}"]`)?.closest('.notification-item');
+                const card = document.querySelector(`[data-note-id="${noteId}"]`);
                 if (card) {
                     card.remove();
                 }
@@ -654,7 +800,7 @@
                 // Check if list is now empty
                 const remainingItems = document.querySelectorAll('.notification-item');
                 if (remainingItems.length === 0) {
-                    location.reload(); // Reload to show empty state
+                    setTimeout(() => location.reload(), 1000);
                 }
             } else {
                 showToast(result.message || "Failed to delete notification", 'error');
@@ -693,25 +839,6 @@
             console.error("Error deleting all notifications:", error);
             showToast("Network error. Please try again.", 'error');
         }
-    }
-
-    function closeConfirm() {
-        const modal = document.getElementById('confirm-modal');
-        const modalForm = document.getElementById('modal-form');
-        const modalAsyncActions = document.getElementById('modal-async-actions');
-        const bulkIdsContainer = document.getElementById('bulk-ids-container');
-        const asyncConfirmBtn = document.getElementById('modal-async-confirm-btn');
-
-        // Reset everything
-        bulkIdsContainer.innerHTML = '';
-        modalForm.classList.add('hidden');
-        modalAsyncActions.classList.remove('hidden');
-        modalForm.action = '';
-
-        // Reset async confirm button
-        asyncConfirmBtn.onclick = null;
-
-        modal.classList.add('hidden');
     }
 
     function toggleHeaderVisibility() {
@@ -765,42 +892,6 @@
             toast.classList.add('translate-x-full', 'opacity-0');
             setTimeout(() => toast.remove(), 300);
         }, 3000);
-    }
-
-    /**
-     * Individual notification button handlers
-     */
-    async function handleIndividualToggle(event, noteId, isCurrentlyRead) {
-        event.preventDefault();
-
-        const endpoint = isCurrentlyRead ?
-            `/notifications/mark-unread/${noteId}` :
-            `/notifications/mark-read/${noteId}`;
-
-        try {
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.status === 'success') {
-                const card = event.target.closest('.notification-item');
-                if (card) {
-                    updateCardReadStatus(card, !isCurrentlyRead);
-                }
-                showToast(result.message || "Notification status updated", 'success');
-            } else {
-                showToast(result.message || "Failed to update notification", 'error');
-            }
-        } catch (error) {
-            console.error("Error updating notification:", error);
-            showToast("Network error. Please try again.", 'error');
-        }
     }
 </script>
 {% endblock %}
