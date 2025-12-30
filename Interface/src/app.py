@@ -1,11 +1,13 @@
 import os
 import re
-from flask import Flask, render_template, redirect, request, session, flash, url_for
+from flask import Flask, render_template, redirect, request, session, flash, url_for, jsonify
 from flask_mysqldb import MySQL
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import google.generativeai as genai
 from authlib.integrations.flask_client import OAuth
+from datetime import datetime
+
 # os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # Load environment variables
@@ -53,6 +55,7 @@ def login_required(f):
 
     return decorated_function
 
+
 def is_valid_email(email):
     # Regex for standard email format validation
     return re.match(r"[^@]+@[^@]+\.[^@]+", email)
@@ -64,6 +67,7 @@ def index():
     if "user_id" in session:
         return redirect(url_for("dashboard"))
     return render_template("index.html")
+
 
 def password_complexity_check(password):
     """
@@ -81,6 +85,7 @@ def password_complexity_check(password):
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
         errors.append("One special character")
     return errors
+
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -137,6 +142,7 @@ def register():
 
     return render_template("register.html")
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -176,6 +182,7 @@ def google_login():
     redirect_uri = url_for('google_authorize', _external=True)
     return google.authorize_redirect(redirect_uri)
 
+
 @app.route('/authorize')
 def google_authorize():
     token = google.authorize_access_token()
@@ -206,11 +213,329 @@ def google_authorize():
     flash("Google authentication failed.", "error")
     return redirect(url_for("login"))
 
+
 @app.route("/logout")
 def logout():
     session.clear()
     flash("Logged out successfully.", "success")
     return redirect(url_for("index"))
+
+
+# --- Notification Helper & Context Processor ---
+
+def create_notification(user_id, plant_id, title, message, event_type):
+    """Inserts a new notification and marks it as unread."""
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("""
+                    INSERT INTO user_notifications (user_id, plant_id, title, message, event_type, is_read)
+                    VALUES (%s, %s, %s, %s, %s, FALSE)
+                    """, (user_id, plant_id, title, message, event_type))
+        mysql.connection.commit()
+    finally:
+        cur.close()
+
+
+@app.context_processor
+def inject_notifications():
+    """Provides unread notification count to all templates globally."""
+    if "user_id" in session:
+        cur = mysql.connection.cursor()
+        cur.execute("SELECT COUNT(*) as count FROM user_notifications WHERE user_id = %s AND is_read = FALSE",
+                    (session['user_id'],))
+        result = cur.fetchone()
+        cur.close()
+        return dict(unread_count=result['count'] if result else 0)
+    return dict(unread_count=0)
+
+
+# --- Routes ---
+
+@app.route("/notifications")
+@login_required
+def notifications():
+    user_id = session.get("user_id")
+    cur = mysql.connection.cursor()
+    try:
+        # Fetch the 50 most recent notifications without changing their read status
+        cur.execute("""
+                    SELECT n.*, p.name as plant_name
+                    FROM user_notifications n
+                             LEFT JOIN plants p ON n.plant_id = p.id
+                    WHERE n.user_id = %s
+                    ORDER BY n.created_at DESC LIMIT 50
+                    """, (user_id,))
+        user_notifications = cur.fetchall()
+
+        return render_template("notifications.html",
+                               active_page="notifications",
+                               notifications=user_notifications)
+    finally:
+        cur.close()
+
+
+@app.route("/api/unread-count")
+@login_required
+def get_unread_count():
+    cur = mysql.connection.cursor()
+    cur.execute("SELECT COUNT(*) as count FROM user_notifications WHERE user_id = %s AND is_read = FALSE",
+                (session['user_id'],))
+    result = cur.fetchone()
+    cur.close()
+    return {"count": result['count'] if result else 0}
+
+
+# --- Notification Management Routes ---
+
+@app.route("/notifications/mark-read/<int:note_id>", methods=["POST"])
+@login_required
+def mark_notification_read(note_id):
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE user_notifications SET is_read = TRUE WHERE id = %s AND user_id = %s",
+                    (note_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success", "message": "Notification marked as read", "note_id": note_id}
+    except Exception as e:
+        print(f"Error in mark_notification_read: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-unread/<int:note_id>", methods=["POST"])
+@login_required
+def mark_notification_unread(note_id):
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE user_notifications SET is_read = FALSE WHERE id = %s AND user_id = %s",
+                    (note_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success", "message": "Notification marked as unread", "note_id": note_id}
+    except Exception as e:
+        print(f"Error in mark_notification_unread: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-all-read", methods=["POST"])
+@login_required
+def mark_all_notifications_read():
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("UPDATE user_notifications SET is_read = TRUE WHERE user_id = %s", (session['user_id'],))
+        mysql.connection.commit()
+
+        # Get count of updated notifications
+        cur.execute("SELECT COUNT(*) as count FROM user_notifications WHERE user_id = %s", (session['user_id'],))
+        count = cur.fetchone()['count']
+
+        return {"status": "success", "message": f"All notifications marked as read", "count": count}
+    except Exception as e:
+        print(f"Error in mark_all_notifications_read: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/delete/<int:note_id>", methods=["POST"])
+@login_required
+def delete_notification(note_id):
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute("DELETE FROM user_notifications WHERE id = %s AND user_id = %s", (note_id, session['user_id']))
+        mysql.connection.commit()
+        return {"status": "success", "message": "Notification deleted", "note_id": note_id}
+    except Exception as e:
+        print(f"Error in delete_notification: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/delete-bulk", methods=["POST"])
+@login_required
+def delete_notifications_bulk():
+    cur = None
+    try:
+        ids = request.form.getlist('notification_ids')
+        if not ids:
+            return {"status": "error", "message": "No notification IDs provided"}, 400
+
+        cur = mysql.connection.cursor()
+        format_strings = ','.join(['%s'] * len(ids))
+        cur.execute(f"DELETE FROM user_notifications WHERE id IN ({format_strings}) AND user_id = %s",
+                    tuple(ids) + (session['user_id'],))
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Successfully deleted {len(ids)} notifications", "count": len(ids)}
+    except Exception as e:
+        print(f"Error in delete_notifications_bulk: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-bulk-read", methods=["POST"])
+@login_required
+def mark_notifications_bulk_read():
+    cur = None
+    try:
+        # Support both JSON and form data
+        if request.is_json:
+            data = request.get_json()
+            if not data:
+                return {"status": "error", "message": "No data provided"}, 400
+            ids = data.get('notification_ids', [])
+        else:
+            ids = request.form.getlist('notification_ids')
+
+        if not ids:
+            return {"status": "error", "message": "No notification IDs provided"}, 400
+
+        cur = mysql.connection.cursor()
+        placeholders = ','.join(['%s'] * len(ids))
+        query = f"UPDATE user_notifications SET is_read = TRUE WHERE id IN ({placeholders}) AND user_id = %s"
+        params = tuple(ids) + (session['user_id'],)
+
+        cur.execute(query, params)
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Marked {len(ids)} notifications as read", "count": len(ids)}
+    except Exception as e:
+        print(f"Error in mark_notifications_bulk_read: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/mark-bulk-unread", methods=["POST"])
+@login_required
+def mark_notifications_bulk_unread():
+    cur = None
+    try:
+        # Support both JSON and form data
+        if request.is_json:
+            data = request.get_json()
+            if not data:
+                return {"status": "error", "message": "No data provided"}, 400
+            ids = data.get('notification_ids', [])
+        else:
+            ids = request.form.getlist('notification_ids')
+
+        if not ids:
+            return {"status": "error", "message": "No notification IDs provided"}, 400
+
+        cur = mysql.connection.cursor()
+        format_strings = ','.join(['%s'] * len(ids))
+        cur.execute(f"UPDATE user_notifications SET is_read = FALSE WHERE id IN ({format_strings}) AND user_id = %s",
+                    tuple(ids) + (session['user_id'],))
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Marked {len(ids)} notifications as unread", "count": len(ids)}
+    except Exception as e:
+        print(f"Error in mark_notifications_bulk_unread: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+
+@app.route("/notifications/delete-all", methods=["POST"])
+@login_required
+def delete_all_notifications():
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        # Get count before deletion for message
+        cur.execute("SELECT COUNT(*) as count FROM user_notifications WHERE user_id = %s", (session['user_id'],))
+        count_result = cur.fetchone()
+        count = count_result['count'] if count_result else 0
+
+        # Delete all notifications
+        cur.execute("DELETE FROM user_notifications WHERE user_id = %s", (session['user_id'],))
+        mysql.connection.commit()
+        return {"status": "success", "message": f"Deleted all notifications", "count": count}
+    except Exception as e:
+        print(f"Error in delete_all_notifications: {str(e)}")
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
+    finally:
+        if cur:
+            cur.close()
+
+@app.route("/update-threshold/<int:plant_id>", methods=["POST"])
+@login_required
+def update_threshold(plant_id):
+    data = request.get_json()
+    new_threshold = data.get("threshold")
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("UPDATE plants SET moisture_threshold = %s WHERE id = %s AND user_id = %s",
+                    (new_threshold, plant_id, session['user_id']))
+        mysql.connection.commit()
+
+        # Trigger notification for threshold change
+        create_notification(
+            session['user_id'], plant_id, "Threshold Updated",
+            f"Moisture threshold set to {new_threshold}% on {datetime.now().strftime('%Y-%m-%d %H:%M')}.",
+            'threshold_update'
+        )
+        return {"status": "success", "threshold": new_threshold}
+    finally:
+        cur.close()
+
+
+@app.route("/toggle-pump/<int:plant_id>", methods=["POST"])
+@login_required
+def toggle_pump(plant_id):
+    data = request.get_json()
+    is_active = data.get('active', False)  # Determine if starting or stopping
+
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT name FROM plants WHERE id = %s AND user_id = %s", (plant_id, session['user_id']))
+        plant = cur.fetchone()
+
+        if not plant:
+            return {"status": "error", "message": "Unauthorized"}, 404
+
+        if is_active:
+            title = "Manual Watering"
+            message = f"Irrigation for {plant['name']} triggered manually at {datetime.now().strftime('%H:%M')}."
+            event_type = 'manual_watering'
+        else:
+            title = "Pump Deactivated"
+            message = f"Manual irrigation for {plant['name']} was stopped at {datetime.now().strftime('%H:%M')}."
+            event_type = 'system'  # Or a custom 'pump_stop' type
+
+        create_notification(session['user_id'], plant_id, title, message, event_type)
+
+        # Log the state change in readings
+        cur.execute("""
+                    INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
+                    VALUES (%s, %s, FALSE)
+                    """, (plant_id, is_active))
+
+        mysql.connection.commit()
+        return {"status": "success"}
+    finally:
+        cur.close()
 
 
 # --- Dashboard & Plant Management ---
@@ -229,6 +554,7 @@ def dashboard():
     user_plants = cur.fetchall()
     cur.close()
     return render_template("dashboard.html", plants=user_plants, active_page="dashboard")
+
 
 @app.route("/plant/<int:plant_id>")
 @login_required
@@ -250,6 +576,7 @@ def plant_detail(plant_id):
     last_reading = cur.fetchone()
     cur.close()
     return render_template("plant_detail.html", plant=plant, last_reading=last_reading)
+
 
 @app.route("/api/ai-tips/<int:plant_id>")
 @login_required
@@ -275,6 +602,7 @@ def get_ai_tips(plant_id):
 
     return analyzer.get_care_advice(plant_data)
 
+
 @app.route("/update-plant-photo/<int:plant_id>", methods=["POST"])
 @login_required
 def update_photo(plant_id):
@@ -297,25 +625,12 @@ def update_photo(plant_id):
     return redirect(url_for('dashboard'))
 
 
-# --- System Routes ---
-@app.route("/notifications")
-@login_required
-def notifications():
-    user_id = session.get("user_id")
-    cur = mysql.connection.cursor()
-    cur.execute("SELECT * FROM user_notifications WHERE user_id = %s ORDER BY created_at DESC LIMIT 50", (user_id,))
-    user_notifications = cur.fetchall()
-    cur.close()
-    return render_template("notifications.html", active_page="notifications", notifications=user_notifications)
-
-
 @app.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():
     user_id = session.get("user_id")
     cur = mysql.connection.cursor()
 
-    # Pre-define hardware IDs (should be available for both GET and POST)
     available_devices = ["FV-NODE-001", "FV-NODE-002", "FV-NODE-003", "FV-NODE-004"]
 
     if request.method == "POST":
@@ -354,8 +669,6 @@ def settings():
             except Exception:
                 flash("Registry Conflict: Username or Email already exists.", "error")
 
-        # After a POST, it is best practice to redirect to the same page (GET)
-        # to prevent "Confirm Form Resubmission" on refresh.
         cur.close()
         return redirect(url_for("settings"))
 
@@ -369,6 +682,7 @@ def settings():
                            user_profile=user_profile,
                            devices=available_devices,
                            active_page="settings")
+
 
 @app.route("/delete-profile", methods=["POST"])
 @login_required
@@ -400,6 +714,7 @@ def delete_profile():
     cur.close()
     return redirect(url_for("settings"))
 
+
 @app.route("/add-plant", methods=["POST"])
 @login_required
 def add_plant():
@@ -411,9 +726,9 @@ def add_plant():
     cur = mysql.connection.cursor()
     try:
         cur.execute("""
-            INSERT INTO plants (name, location, moisture_threshold, user_id) 
-            VALUES (%s, %s, %s, %s)
-        """, (name, location, threshold, user_id))
+                    INSERT INTO plants (name, location, moisture_threshold, user_id)
+                    VALUES (%s, %s, %s, %s)
+                    """, (name, location, threshold, user_id))
         mysql.connection.commit()
         flash("Ecosystem Updated: New botanical device synchronized.", "success")
     except Exception as e:
@@ -421,53 +736,6 @@ def add_plant():
     finally:
         cur.close()
     return redirect(url_for("settings"))
-
-
-@app.route("/update-threshold/<int:plant_id>", methods=["POST"])
-@login_required
-def update_threshold(plant_id):
-    data = request.get_json()
-    print(f"DEBUG: Received data: {data}")
-    print(f"DEBUG: Plant ID: {plant_id}, User ID: {session['user_id']}")
-
-    if not data or 'threshold' not in data:
-        print("DEBUG: Malformed request - no threshold in data")
-        return {"status": "error", "message": "Malformed request"}, 400
-
-    new_threshold = data.get("threshold")
-    print(f"DEBUG: New threshold value: {new_threshold}")
-
-    cur = mysql.connection.cursor()
-
-    try:
-        # First, check if the plant exists and belongs to the user
-        cur.execute("SELECT moisture_threshold FROM plants WHERE id = %s AND user_id = %s",
-                    (plant_id, session['user_id']))
-        plant = cur.fetchone()
-
-        print(f"DEBUG: Plant query result: {plant}")
-
-        if not plant:
-            print(f"DEBUG: Plant not found or unauthorized")
-            return {"status": "error", "message": "Unauthorized or plant not found"}, 404
-
-        # Update the threshold
-        cur.execute("""
-                    UPDATE plants
-                    SET moisture_threshold = %s
-                    WHERE id = %s
-                      AND user_id = %s
-                    """, (new_threshold, plant_id, session['user_id']))
-
-        mysql.connection.commit()
-        print(f"DEBUG: Successfully updated threshold to {new_threshold}")
-        return {"status": "success", "threshold": new_threshold}
-    except Exception as e:
-        mysql.connection.rollback()
-        print(f"DEBUG: Error occurred: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
-    finally:
-        cur.close()
 
 
 @app.route("/remove-plant-photo/<int:plant_id>", methods=["POST"])
@@ -481,6 +749,7 @@ def remove_photo(plant_id):
     flash("Photo removed successfully.", "success")
     return redirect(url_for('dashboard'))
 
+
 @app.route("/delete-plant/<int:plant_id>", methods=["POST"])
 @login_required
 def delete_plant(plant_id):
@@ -490,6 +759,7 @@ def delete_plant(plant_id):
     cur.close()
     flash("Plant removed from your garden.", "success")
     return redirect(url_for('dashboard'))
+
 
 @app.route("/update-plant-info/<int:plant_id>", methods=["POST"])
 @login_required
@@ -501,16 +771,19 @@ def update_plant_info(plant_id):
     cur = mysql.connection.cursor()
     try:
         cur.execute("""
-            UPDATE plants 
-            SET name = %s, location = %s 
-            WHERE id = %s AND user_id = %s
-        """, (new_name, new_location, plant_id, session['user_id']))
+                    UPDATE plants
+                    SET name     = %s,
+                        location = %s
+                    WHERE id = %s
+                      AND user_id = %s
+                    """, (new_name, new_location, plant_id, session['user_id']))
         mysql.connection.commit()
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}, 500
     finally:
         cur.close()
+
 
 if __name__ == '__main__':
     app.run(debug=True)

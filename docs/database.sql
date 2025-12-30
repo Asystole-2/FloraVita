@@ -127,3 +127,10 @@ INSERT INTO moisture_readings (plant_id, moisture_level, pump_status, is_automat
 (5, 60.00, FALSE, FALSE, NOW() - INTERVAL 50 HOUR),
 (5, 44.50, TRUE,  TRUE,  NOW() - INTERVAL 10 HOUR), -- Auto-watering triggered
 (5, 55.20, FALSE, FALSE, NOW() - INTERVAL 2 HOUR);
+
+
+-- Edit for notifications
+
+-- 'threshold_update' for more specific alert updates
+ALTER TABLE user_notifications MODIFY COLUMN event_type
+ENUM('low_moisture', 'auto_watering', 'manual_watering', 'threshold_update', 'system') DEFAULT 'system';
