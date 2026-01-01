@@ -134,3 +134,6 @@ INSERT INTO moisture_readings (plant_id, moisture_level, pump_status, is_automat
 -- 'threshold_update' for more specific alert updates
 ALTER TABLE user_notifications MODIFY COLUMN event_type
 ENUM('low_moisture', 'auto_watering', 'manual_watering', 'threshold_update', 'system') DEFAULT 'system';
+
+-- Edit for adding new device for plants configuration
+ALTER TABLE plants ADD COLUMN hardware_id VARCHAR(50) UNIQUE AFTER user_id;

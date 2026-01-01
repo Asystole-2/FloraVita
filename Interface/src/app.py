@@ -1,11 +1,12 @@
 import os
 import re
+import oauth
+import pubnub
 from flask import Flask, render_template, redirect, request, session, flash, url_for, jsonify
 from flask_mysqldb import MySQL
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import google.generativeai as genai
-from authlib.integrations.flask_client import OAuth
 from datetime import datetime
 
 # os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -34,7 +35,6 @@ genai.configure(api_key=api_key)
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 # OAuth Configuration for Google Login
-oauth = OAuth(app)
 google = oauth.register(
     name='google',
     client_id=os.getenv("GOOGLE_CLIENT_ID"),
@@ -500,7 +500,6 @@ def update_threshold(plant_id):
     finally:
         cur.close()
 
-
 @app.route("/toggle-pump/<int:plant_id>", methods=["POST"])
 @login_required
 def toggle_pump(plant_id):
@@ -509,12 +508,23 @@ def toggle_pump(plant_id):
 
     cur = mysql.connection.cursor()
     try:
+        # 1. Authorization Check
         cur.execute("SELECT name FROM plants WHERE id = %s AND user_id = %s", (plant_id, session['user_id']))
         plant = cur.fetchone()
 
         if not plant:
             return {"status": "error", "message": "Unauthorized"}, 404
 
+        # 2. Hardware Command (PubNub)
+        # Sends real-time instruction to the Raspberry Pi subscriber
+        command = "PUMP_ON" if is_active else "PUMP_OFF"
+        pubnub.publish().channel("pump-commands").message({
+            "command": command,
+            "plant_id": plant_id,
+            "timestamp": datetime.now().isoformat()
+        }).sync()
+
+        # Notification Logic
         if is_active:
             title = "Manual Watering"
             message = f"Irrigation for {plant['name']} triggered manually at {datetime.now().strftime('%H:%M')}."
@@ -522,11 +532,12 @@ def toggle_pump(plant_id):
         else:
             title = "Pump Deactivated"
             message = f"Manual irrigation for {plant['name']} was stopped at {datetime.now().strftime('%H:%M')}."
-            event_type = 'system'  # Or a custom 'pump_stop' type
+            event_type = 'system'
 
         create_notification(session['user_id'], plant_id, title, message, event_type)
 
-        # Log the state change in readings
+        # Database Persistence
+        # Logs the state change so the UI charts reflect the activity
         cur.execute("""
                     INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
                     VALUES (%s, %s, FALSE)
@@ -534,6 +545,10 @@ def toggle_pump(plant_id):
 
         mysql.connection.commit()
         return {"status": "success"}
+
+    except Exception as e:
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
     finally:
         cur.close()
 
@@ -721,6 +736,7 @@ def add_plant():
     name = request.form.get("plant_name")
     location = request.form.get("location")
     threshold = request.form.get("threshold", 30)
+    hardware_id = request.form.get("hardware_id")
     user_id = session.get("user_id")
 
     cur = mysql.connection.cursor()
