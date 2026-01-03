@@ -1,13 +1,19 @@
 import os
 import re
-import oauth
+
+import google
+# from authlib.integrations.flask_client import OAuth
 import pubnub
 from flask import Flask, render_template, redirect, request, session, flash, url_for, jsonify
 from flask_mysqldb import MySQL
+from pubnub.callbacks import SubscribeCallback
+from pubnub.pnconfiguration import PNConfiguration
+from pubnub.pubnub import PubNub
+from tensorflow._api.v2.compat.v2.config import threading
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import google.generativeai as genai
-from datetime import datetime
+from datetime import datetime, time
 
 # os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
@@ -27,6 +33,90 @@ app.config.update(
 )
 mysql = MySQL(app)
 
+# PubNub Configuration for Moisture Data
+pn_config = PNConfiguration()
+pn_config.subscribe_key = os.getenv('PUBNUB_SUBSCRIBE_KEY')
+pn_config.publish_key = os.getenv('PUBNUB_PUBLISH_KEY')
+pn_config.user_id = "floravita_server"
+pubnub = PubNub(pn_config)
+
+
+class MoistureSubscriber(SubscribeCallback):
+    def message(self, pubnub, message):
+        """Handle incoming moisture data from sensors"""
+        data = message.message
+        hardware_id = data.get("hardware_id")
+        moisture = data.get("moisture")
+        status = data.get("status")
+
+        print(f"Received moisture data: {hardware_id} - {moisture}%")
+
+        # Update database with moisture reading
+        try:
+            cur = mysql.connection.cursor()
+
+            # Find which plant this hardware belongs to
+            cur.execute("SELECT id FROM plants WHERE hardware_id = %s", (hardware_id,))
+            plant = cur.fetchone()
+
+            if plant:
+                plant_id = plant['id']
+
+                # Insert moisture reading
+                cur.execute("""
+                            INSERT INTO moisture_readings (plant_id, moisture_level, pump_status, is_automated)
+                            VALUES (%s, %s, FALSE, FALSE)
+                            """, (plant_id, moisture))
+
+                # Update plant's last moisture
+                cur.execute("""
+                            UPDATE plants
+                            SET last_moisture = %s,
+                                last_update   = NOW()
+                            WHERE id = %s
+                            """, (moisture, plant_id))
+
+                mysql.connection.commit()
+                print(f"Updated plant {plant_id} with moisture {moisture}%")
+
+            cur.close()
+        except Exception as e:
+            print(f"Error updating moisture data: {e}")
+            try:
+                mysql.connection.rollback()
+            except:
+                pass
+
+    def status(self, pubnub, status):
+        if status.category == "PNConnectedCategory":
+            print("PubNub Connected - Listening for moisture data")
+
+    def presence(self, pubnub, presence):
+        pass
+
+
+# Start PubNub listener in background thread
+def start_pubnub_listener():
+    """Start PubNub subscription in background thread"""
+    try:
+        listener = MoistureSubscriber()
+        pubnub.add_listener(listener)
+        pubnub.subscribe().channels("moisture-data").execute()
+        print("Moisture data listener started")
+    except Exception as e:
+        print(f"Error starting PubNub listener: {e}")
+
+
+# Start the listener when Flask starts
+with app.app_context():
+    try:
+        # Run in a separate thread to not block Flask
+        thread = threading.Thread(target=start_pubnub_listener, daemon=True)
+        thread.start()
+        time.sleep(1)  # Give it a moment to connect
+    except Exception as e:
+        print(f"Could not start PubNub listener: {e}")
+
 # Configure Gemini AI
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
@@ -35,13 +125,13 @@ genai.configure(api_key=api_key)
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 # OAuth Configuration for Google Login
-google = oauth.register(
-    name='google',
-    client_id=os.getenv("GOOGLE_CLIENT_ID"),
-    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-    client_kwargs={'scope': 'openid email profile'}
-)
+# google = oauth.register(
+#     name='google',
+#     client_id=os.getenv("GOOGLE_CLIENT_ID"),
+#     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+#     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+#     client_kwargs={'scope': 'openid email profile'}
+# )
 
 
 def login_required(f):
@@ -559,15 +649,34 @@ def toggle_pump(plant_id):
 def dashboard():
     user_id = session.get("user_id")
     cur = mysql.connection.cursor()
+
+    # Get plants with their latest moisture readings
     cur.execute("""
-                SELECT p.*, MAX(m.moisture_level) as last_moisture, MAX(m.recorded_at) as last_update
+                SELECT p.*,
+                       COALESCE(
+                               (SELECT m.moisture_level
+                                FROM moisture_readings m
+                                WHERE m.plant_id = p.id
+                                ORDER BY m.recorded_at DESC
+                               LIMIT 1), 
+                0
+            )                                       as last_moisture,
+                       COALESCE(
+                               (SELECT m.recorded_at
+                                FROM moisture_readings m
+                                WHERE m.plant_id = p.id
+                                ORDER BY m.recorded_at DESC
+                               LIMIT 1), 
+                p.created_at
+            ) as last_update
                 FROM plants p
-                         LEFT JOIN moisture_readings m ON p.id = m.plant_id
                 WHERE p.user_id = %s
-                GROUP BY p.id
+                ORDER BY p.id
                 """, (user_id,))
+
     user_plants = cur.fetchall()
     cur.close()
+
     return render_template("dashboard.html", plants=user_plants, active_page="dashboard")
 
 
