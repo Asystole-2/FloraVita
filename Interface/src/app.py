@@ -1,6 +1,6 @@
 import os
 import re
-
+import threading
 import google
 # from authlib.integrations.flask_client import OAuth
 import pubnub
@@ -9,7 +9,6 @@ from flask_mysqldb import MySQL
 from pubnub.callbacks import SubscribeCallback
 from pubnub.pnconfiguration import PNConfiguration
 from pubnub.pubnub import PubNub
-from tensorflow._api.v2.compat.v2.config import threading
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import google.generativeai as genai
@@ -51,41 +50,44 @@ class MoistureSubscriber(SubscribeCallback):
 
         print(f"Received moisture data: {hardware_id} - {moisture}%")
 
-        # Update database with moisture reading
-        try:
-            cur = mysql.connection.cursor()
-
-            # Find which plant this hardware belongs to
-            cur.execute("SELECT id FROM plants WHERE hardware_id = %s", (hardware_id,))
-            plant = cur.fetchone()
-
-            if plant:
-                plant_id = plant['id']
-
-                # Insert moisture reading
-                cur.execute("""
-                            INSERT INTO moisture_readings (plant_id, moisture_level, pump_status, is_automated)
-                            VALUES (%s, %s, FALSE, FALSE)
-                            """, (plant_id, moisture))
-
-                # Update plant's last moisture
-                cur.execute("""
-                            UPDATE plants
-                            SET last_moisture = %s,
-                                last_update   = NOW()
-                            WHERE id = %s
-                            """, (moisture, plant_id))
-
-                mysql.connection.commit()
-                print(f"Updated plant {plant_id} with moisture {moisture}%")
-
-            cur.close()
-        except Exception as e:
-            print(f"Error updating moisture data: {e}")
+        # Use Flask application context
+        with app.app_context():
             try:
-                mysql.connection.rollback()
-            except:
-                pass
+                cur = mysql.connection.cursor()
+
+                # Find which plant this hardware belongs to
+                cur.execute("SELECT id FROM plants WHERE hardware_id = %s", (hardware_id,))
+                plant = cur.fetchone()
+
+                if plant:
+                    plant_id = plant['id']
+
+                    # Insert moisture reading
+                    cur.execute("""
+                                INSERT INTO moisture_readings (plant_id, moisture_level, pump_status, is_automated)
+                                VALUES (%s, %s, FALSE, FALSE)
+                                """, (plant_id, moisture))
+
+                    # Update plant's last moisture
+                    cur.execute("""
+                                UPDATE plants
+                                SET last_moisture = %s,
+                                    last_update   = NOW()
+                                WHERE id = %s
+                                """, (moisture, plant_id))
+
+                    mysql.connection.commit()
+                    print(f"Updated plant {plant_id} with moisture {moisture}%")
+                else:
+                    print(f"No plant found with hardware_id: {hardware_id}")
+
+                cur.close()
+            except Exception as e:
+                print(f"Error updating moisture data: {e}")
+                try:
+                    mysql.connection.rollback()
+                except:
+                    pass
 
     def status(self, pubnub, status):
         if status.category == "PNConnectedCategory":
@@ -93,7 +95,6 @@ class MoistureSubscriber(SubscribeCallback):
 
     def presence(self, pubnub, presence):
         pass
-
 
 # Start PubNub listener in background thread
 def start_pubnub_listener():
@@ -650,35 +651,85 @@ def dashboard():
     user_id = session.get("user_id")
     cur = mysql.connection.cursor()
 
-    # Get plants with their latest moisture readings
-    cur.execute("""
-                SELECT p.*,
-                       COALESCE(
-                               (SELECT m.moisture_level
-                                FROM moisture_readings m
-                                WHERE m.plant_id = p.id
-                                ORDER BY m.recorded_at DESC
-                               LIMIT 1), 
-                0
-            )                                       as last_moisture,
-                       COALESCE(
-                               (SELECT m.recorded_at
-                                FROM moisture_readings m
-                                WHERE m.plant_id = p.id
-                                ORDER BY m.recorded_at DESC
-                               LIMIT 1), 
-                p.created_at
-            ) as last_update
-                FROM plants p
-                WHERE p.user_id = %s
-                ORDER BY p.id
-                """, (user_id,))
+    try:
+        # Get plants with their latest moisture readings
+        cur.execute("""
+                    SELECT p.*,
+                           COALESCE(
+                                   (SELECT m.moisture_level
+                                    FROM moisture_readings m
+                                    WHERE m.plant_id = p.id
+                                    ORDER BY m.recorded_at DESC
+                                   LIMIT 1), 
+                    0
+                )                                           as last_moisture,
+                           COALESCE(
+                                   (SELECT m.recorded_at
+                                    FROM moisture_readings m
+                                    WHERE m.plant_id = p.id
+                                    ORDER BY m.recorded_at DESC
+                                   LIMIT 1), 
+                    p.created_at
+                ) as last_update
+                    FROM plants p
+                    WHERE p.user_id = %s
+                    ORDER BY p.id
+                    """, (user_id,))
 
-    user_plants = cur.fetchall()
-    cur.close()
+        user_plants = cur.fetchall()
+        cur.close()
 
-    return render_template("dashboard.html", plants=user_plants, active_page="dashboard")
+        # Debug output
+        print(f"Dashboard: Found {len(user_plants)} plants for user {user_id}")
+        for plant in user_plants:
+            print(f"  - {plant['name']}: {plant['last_moisture']}% (updated: {plant['last_update']})")
 
+        return render_template("dashboard.html", plants=user_plants, active_page="dashboard")
+
+    except Exception as e:
+        print(f"❌ Error in dashboard route: {e}")
+        flash("Error loading dashboard", "error")
+        return redirect(url_for("index"))
+
+
+@app.route("/api/latest-moisture")
+@login_required
+def get_latest_moisture():
+    """Get latest moisture readings for all user's plants"""
+    user_id = session.get("user_id")
+    cur = mysql.connection.cursor()
+
+    try:
+        # Get plants with their latest moisture data
+        cur.execute("""
+                    SELECT p.id                         as plant_id,
+                           p.name,
+                           COALESCE(p.last_moisture, 0) as moisture,
+                           p.last_update as timestamp
+                    FROM plants p
+                    WHERE p.user_id = %s
+                    ORDER BY p.id
+                    """, (user_id,))
+
+        updates = cur.fetchall()
+
+        return jsonify({
+            "success": True,
+            "updates": [
+                {
+                    "plant_id": row['plant_id'],
+                    "moisture": float(row['moisture']),
+                    "timestamp": row['timestamp'].isoformat() if row['timestamp'] else None,
+                    "plant_name": row['name']
+                }
+                for row in updates
+            ]
+        })
+    except Exception as e:
+        print(f"Error in get_latest_moisture: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        cur.close()
 
 @app.route("/plant/<int:plant_id>")
 @login_required
@@ -851,9 +902,9 @@ def add_plant():
     cur = mysql.connection.cursor()
     try:
         cur.execute("""
-                    INSERT INTO plants (name, location, moisture_threshold, user_id)
-                    VALUES (%s, %s, %s, %s)
-                    """, (name, location, threshold, user_id))
+                    INSERT INTO plants (name, location, moisture_threshold, user_id, hardware_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """, (name, location, threshold, user_id, hardware_id))
         mysql.connection.commit()
         flash("Ecosystem Updated: New botanical device synchronized.", "success")
     except Exception as e:
@@ -861,7 +912,6 @@ def add_plant():
     finally:
         cur.close()
     return redirect(url_for("settings"))
-
 
 @app.route("/remove-plant-photo/<int:plant_id>", methods=["POST"])
 @login_required

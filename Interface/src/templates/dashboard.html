@@ -471,46 +471,50 @@ function confirmDeletion(type) {
 }
 
 /**
- * Real-time Moisture Updates via WebSocket
+ * Poll for moisture updates every 5 seconds
  */
-function setupRealTimeMoistureUpdates() {
-    // Create WebSocket connection
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/moisture`;
+let moisturePollInterval = null;
 
-    const socket = new WebSocket(wsUrl);
+function setupMoisturePolling() {
+    console.log('Setting up moisture polling...');
 
-    socket.onopen = function() {
-        console.log('🌱 Connected to moisture WebSocket');
-    };
+    // Clear any existing interval
+    if (moisturePollInterval) {
+        clearInterval(moisturePollInterval);
+    }
 
-    socket.onmessage = function(event) {
-        try {
-            const data = JSON.parse(event.data);
-            const plantId = data.plant_id;
-            const moisture = data.moisture;
-            const timestamp = data.timestamp;
+    // Poll every 2 seconds
+    moisturePollInterval = setInterval(pollMoistureData, 2000);
 
-            // Update the plant card if visible
-            updatePlantCardMoisture(plantId, moisture, timestamp);
+    // First poll after 1 second
+    setTimeout(pollMoistureData, 1000);
+}
 
-            // Update modal if it's open for this plant
-            if (currentPlantId === plantId) {
-                document.getElementById('modal-moisture').innerText = moisture + '%';
-            }
-        } catch (e) {
-            console.error('Error parsing WebSocket message:', e);
+async function pollMoistureData() {
+    try {
+        const response = await fetch('/api/latest-moisture');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
         }
-    };
 
-    socket.onerror = function(error) {
-        console.error('WebSocket error:', error);
-    };
+        const data = await response.json();
 
-    socket.onclose = function() {
-        console.log('WebSocket disconnected, reconnecting in 5s...');
-        setTimeout(setupRealTimeMoistureUpdates, 5000);
-    };
+        if (data.success && data.updates) {
+            // Update each plant card
+            data.updates.forEach(update => {
+                updatePlantCardMoisture(
+                    update.plant_id,
+                    update.moisture,
+                    update.timestamp
+                );
+            });
+
+            console.log(` Updated ${data.updates.length} plants`);
+        }
+    } catch (error) {
+        console.log('📡 Polling failed (will retry):', error.message);
+    }
 }
 
 /**
@@ -524,13 +528,13 @@ function updatePlantCardMoisture(plantId, moisture, timestamp) {
     // Update moisture percentage
     const moistureSpan = card.querySelector('.text-blue-400');
     if (moistureSpan) {
-        moistureSpan.innerText = moisture + '%';
+        moistureSpan.textContent = `${moisture}%`;
     }
 
     // Update progress bar
     const progressBar = card.querySelector('.h-full');
     if (progressBar) {
-        progressBar.style.width = moisture + '%';
+        progressBar.style.width = `${moisture}%`;
 
         // Change color based on moisture level
         if (moisture < 30) {
@@ -546,13 +550,22 @@ function updatePlantCardMoisture(plantId, moisture, timestamp) {
     const timestampElement = card.querySelector('.text-gray-500');
     if (timestampElement && timestamp) {
         const date = new Date(timestamp);
-        timestampElement.innerText = `Last Sync: ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        timestampElement.textContent = `Last Sync: ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    }
+
+    // Update modal if it's open for this plant
+    if (currentPlantId === plantId) {
+        const modalMoisture = document.getElementById('modal-moisture');
+        if (modalMoisture) {
+            modalMoisture.textContent = `${moisture}%`;
+        }
     }
 }
 
-// Start WebSocket connection when page loads
+// Start polling when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    setupRealTimeMoistureUpdates();
+    console.log('FloraVita Dashboard loaded');
+    setupMoisturePolling();
 });
 </script>
 {% endblock %}
