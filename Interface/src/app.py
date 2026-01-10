@@ -3,8 +3,41 @@ import re
 import threading
 import time
 from datetime import datetime
-import google
-# from authlib.integrations.flask_client import OAuth
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+# Try to import OAuth - handle gracefully if not available
+try:
+    from authlib.integrations.flask_client import OAuth
+    print("✓ OAuth imported successfully from authlib")
+except ImportError:
+    try:
+        import authlib.integrations.flask_client as flask_auth
+        OAuth = flask_auth.OAuth
+        print("✓ OAuth imported via alternative method")
+    except ImportError as e:
+        print(f"✗ Failed to import OAuth: {e}")
+        print("⚠ Google OAuth will not be available")
+        # Create a dummy class so the app doesn't crash
+        class DummyOAuth:
+            def __init__(self, app=None):
+                self.app = app
+            def register(self, **kwargs):
+                class DummyClient:
+                    def authorize_redirect(self, *args, **kwargs):
+                        return None
+                    def authorize_access_token(self):
+                        return {}
+                    def get(self, *args, **kwargs):
+                        class DummyResponse:
+                            json = lambda: {}
+                        return DummyResponse()
+                return DummyClient()
+            def init_app(self, app):
+                pass
+        OAuth = DummyOAuth
+
+# Other imports
 import pubnub
 from flask import Flask, render_template, redirect, request, session, flash, url_for, jsonify
 from flask_mysqldb import MySQL
@@ -14,8 +47,6 @@ from pubnub.pubnub import PubNub
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import google.generativeai as genai
-
-# os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # Load environment variables
 load_dotenv()
@@ -32,6 +63,20 @@ app.config.update(
     MYSQL_CURSORCLASS="DictCursor"
 )
 mysql = MySQL(app)
+
+# Initialize OAuth
+oauth = OAuth(app)
+
+# OAuth Configuration for Google Login
+google = oauth.register(
+    name='google',
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile',
+                   'prompt': 'select_account'
+                   }
+)
 
 # PubNub Configuration for Moisture Data
 pn_config = PNConfiguration()
@@ -268,16 +313,6 @@ genai.configure(api_key=api_key)
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
 
 
-# OAuth Configuration for Google Login
-# google = oauth.register(
-#     name='google',
-#     client_id=os.getenv("GOOGLE_CLIENT_ID"),
-#     client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-#     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-#     client_kwargs={'scope': 'openid email profile'}
-# )
-
-
 def login_required(f):
     from functools import wraps
     @wraps(f)
@@ -413,40 +448,137 @@ def login():
 # Google Login OAuth Routes
 @app.route('/login/google')
 def google_login():
+
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+
     redirect_uri = url_for('google_authorize', _external=True)
     return google.authorize_redirect(redirect_uri)
 
 
 @app.route('/authorize')
 def google_authorize():
-    token = google.authorize_access_token()
-    user_info = token.get('userinfo')
-    if user_info:
-        email = user_info['email']
+
+    try:
+        # Fetch access token
+        token = google.authorize_access_token()
+
+        # Get user info
+        user_info = google.get('https://www.googleapis.com/oauth2/v3/userinfo').json()
+
+        if not user_info:
+            flash("Failed to retrieve user information from Google.", "error")
+            return redirect(url_for('login'))
+
+        email = user_info.get('email')
+        google_id = user_info.get('sub')
+        name = user_info.get('name')
+        picture = user_info.get('picture')
+
+        if not email:
+            flash("Google account email is required.", "error")
+            return redirect(url_for('login'))
+
         cur = mysql.connection.cursor()
+
+        # Check if user exists
         cur.execute("SELECT id, username, role FROM users WHERE email = %s", (email,))
         user = cur.fetchone()
 
         if not user:
-            # Create user if not exists (Oauth flow)
-            username = email.split('@')[0]
-            temp_pw = generate_password_hash(os.urandom(24).hex())
-            cur.execute("INSERT INTO users (username, email, password) VALUES (%s, %s, %s)",
-                        (username, email, temp_pw))
+            # Create new user
+            # Generate username from email if name not available
+            username = name.lower().replace(' ', '_') if name else email.split('@')[0]
+
+            # Ensure username is unique
+            base_username = username
+            counter = 1
+            while True:
+                cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+                if not cur.fetchone():
+                    break
+                username = f"{base_username}_{counter}"
+                counter += 1
+
+            # Create user with Google OAuth data
+            cur.execute("""
+                        INSERT INTO users (username, email, password, role, google_id, profile_picture)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (username, email, generate_password_hash(os.urandom(24).hex()), 'user', google_id, picture))
+
             mysql.connection.commit()
+
+            # Get the new user
             cur.execute("SELECT id, username, role FROM users WHERE email = %s", (email,))
             user = cur.fetchone()
 
+        # Set session
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         session["role"] = user["role"]
+
         cur.close()
-        flash("Logged in with Google!", "success")
+
+        flash("Successfully logged in with Google!", "success")
         return redirect(url_for("dashboard"))
 
-    flash("Google authentication failed.", "error")
-    return redirect(url_for("login"))
+    except Exception as e:
+        print(f"Google OAuth error: {e}")
+        flash("Google authentication failed. Please try again.", "error")
+        return redirect(url_for("login"))
 
+
+# Helper functions
+def check_google_user(email):
+    """Check if a Google user exists in the database"""
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT id, username, role FROM users WHERE email = %s", (email,))
+        return cur.fetchone()
+    finally:
+        cur.close()
+
+
+def create_google_user(email, google_id, name, picture):
+    """Create a new user from Google OAuth data"""
+    cur = mysql.connection.cursor()
+    try:
+        username = name.lower().replace(' ', '_') if name else email.split('@')[0]
+
+        # Ensure unique username
+        base_username = username
+        counter = 1
+        while True:
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            if not cur.fetchone():
+                break
+            username = f"{base_username}_{counter}"
+            counter += 1
+
+        cur.execute("""
+                    INSERT INTO users (username, email, password, role, google_id, profile_picture)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (username, email, generate_password_hash(os.urandom(24).hex()), 'user', google_id, picture))
+
+        mysql.connection.commit()
+        return username
+    finally:
+        cur.close()
+
+
+@app.route('/login/google/cancel')
+def google_login_cancel():
+    """Handle when user cancels Google login"""
+    flash("Google login was cancelled.", "info")
+    return redirect(url_for('login'))
+
+
+@app.route('/logout/google')
+def google_logout():
+    session.clear()
+    flash("Logged out successfully.", "success")
+    return redirect(url_for('index'))
 
 @app.route("/logout")
 def logout():
