@@ -114,29 +114,21 @@
 
                 <form method="POST" action="/add-plant" class="space-y-6">
                     <div>
-                        <label class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest ml-1">Connect
-                            Hardware Device</label>
+                        <label class="text-[9px] font-bold text-emerald-400 uppercase tracking-widest ml-1">Hardware ID
+                            / Device Serial</label>
                         <div class="relative mt-1 group">
-                            <input type="text"
-                                   name="device_id"
-                                   id="device-input"
-                                   list="device-list"
-                                   required
-                                   placeholder="Select or Type Unique ID..."
-                                   class="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-emerald-500/40 focus:bg-white/10 transition-all placeholder:text-gray-600">
+                            <input type="text" name="hardware_id" id="hardware-id-input" list="device-list" required
+                                   placeholder="e.g., FV-NODE-001"
+                                   class="w-full p-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-emerald-500/40 transition-all">
 
                             <datalist id="device-list">
                                 {% for id in devices %}
                                 <option value="{{ id }}">{{ id }} (Detected)</option>
                                 {% endfor %}
                             </datalist>
-
-                            <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 group-focus-within:text-emerald-400 transition-colors">
-                                <i class="fas fa-search text-xs"></i>
-                            </div>
                         </div>
-                        <p class="text-[8px] text-gray-500 mt-2 ml-1 italic">Type a manual ID or select a detected
-                            FloraVita Node from the list.</p>
+                        <p class="text-[8px] text-gray-500 mt-2 ml-1 italic">Enter the unique ID assigned to your
+                            Arduino/Pi node.</p>
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

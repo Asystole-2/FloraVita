@@ -134,3 +134,24 @@ INSERT INTO moisture_readings (plant_id, moisture_level, pump_status, is_automat
 -- 'threshold_update' for more specific alert updates
 ALTER TABLE user_notifications MODIFY COLUMN event_type
 ENUM('low_moisture', 'auto_watering', 'manual_watering', 'threshold_update', 'system') DEFAULT 'system';
+
+-- Edit for adding new device for plants configuration
+ALTER TABLE plants ADD COLUMN hardware_id VARCHAR(50) UNIQUE AFTER user_id;
+
+-- time for watering
+ALTER TABLE plants
+ADD COLUMN watering_duration INT DEFAULT 10 AFTER moisture_threshold;
+
+-- google log in
+-- Add columns for Google OAuth support
+ALTER TABLE users
+ADD COLUMN google_id VARCHAR(255) NULL,
+ADD COLUMN profile_picture TEXT NULL,
+ADD UNIQUE INDEX google_id_unique (google_id);
+
+-- Ensure email is unique
+ALTER TABLE users
+ADD UNIQUE INDEX email_unique (email);
+
+-- Update existing users if needed
+UPDATE users SET google_id = NULL WHERE google_id = '';

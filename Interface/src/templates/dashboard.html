@@ -400,5 +400,172 @@
             icon.style.transform = "rotate(45deg)";
         }
     }
+    /**
+ * Filters the garden grid based on search input
+ */
+function filterPlants() {
+    const input = document.getElementById('plant-search');
+    const filter = input.value.toLowerCase();
+    const container = document.getElementById('garden-container');
+    const cards = container.getElementsByClassName('plant-card');
+    const noResults = document.getElementById('no-results');
+    let hasMatch = false;
+
+    for (let i = 0; i < cards.length; i++) {
+        // Find the plant name (h3) inside the card
+        const title = cards[i].querySelector('h3');
+        if (title) {
+            const textValue = title.textContent || title.innerText;
+            if (textValue.toLowerCase().indexOf(filter) > -1) {
+                cards[i].style.display = "";
+                hasMatch = true;
+            } else {
+                cards[i].style.display = "none";
+            }
+        }
+    }
+
+    // Toggle the "No results" message
+    if (noResults) {
+        if (hasMatch || filter === "") {
+            noResults.classList.add('hidden');
+        } else {
+            noResults.classList.remove('hidden');
+        }
+    }
+}
+
+/**
+ * Opens a confirmation dialog for destructive actions
+ * @param {string} type - Either 'plant' or 'photo'
+ */
+function confirmDeletion(type) {
+    const confirmModal = document.getElementById('confirm-modal');
+    const confirmTitle = document.getElementById('confirm-title');
+    const actionBtn = document.getElementById('confirm-action-btn');
+
+    if (!confirmModal || !confirmTitle || !actionBtn) return;
+
+    confirmModal.classList.remove('hidden');
+
+    if (type === 'plant') {
+        confirmTitle.innerText = "Delete Plant?";
+        // Direct the confirmation button to the delete-plant route
+        actionBtn.onclick = () => {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/delete-plant/${currentPlantId}`;
+            document.body.appendChild(form);
+            form.submit();
+        };
+    } else if (type === 'photo') {
+        confirmTitle.innerText = "Remove Photo?";
+        actionBtn.onclick = () => {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/remove-plant-photo/${currentPlantId}`;
+            document.body.appendChild(form);
+            form.submit();
+        };
+    }
+}
+
+/**
+ * Poll for moisture updates every 5 seconds
+ */
+let moisturePollInterval = null;
+
+function setupMoisturePolling() {
+    console.log('Setting up moisture polling...');
+
+    // Clear any existing interval
+    if (moisturePollInterval) {
+        clearInterval(moisturePollInterval);
+    }
+
+    // Poll every 2 seconds
+    moisturePollInterval = setInterval(pollMoistureData, 2000);
+
+    // First poll after 1 second
+    setTimeout(pollMoistureData, 1000);
+}
+
+async function pollMoistureData() {
+    try {
+        const response = await fetch('/api/latest-moisture');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.updates) {
+            // Update each plant card
+            data.updates.forEach(update => {
+                updatePlantCardMoisture(
+                    update.plant_id,
+                    update.moisture,
+                    update.timestamp
+                );
+            });
+
+            console.log(` Updated ${data.updates.length} plants`);
+        }
+    } catch (error) {
+        console.log('📡 Polling failed (will retry):', error.message);
+    }
+}
+
+/**
+ * Update plant card with new moisture data
+ */
+function updatePlantCardMoisture(plantId, moisture, timestamp) {
+    // Find the plant card
+    const card = document.querySelector(`[data-card-id="${plantId}"]`);
+    if (!card) return;
+
+    // Update moisture percentage
+    const moistureSpan = card.querySelector('.text-blue-400');
+    if (moistureSpan) {
+        moistureSpan.textContent = `${moisture}%`;
+    }
+
+    // Update progress bar
+    const progressBar = card.querySelector('.h-full');
+    if (progressBar) {
+        progressBar.style.width = `${moisture}%`;
+
+        // Change color based on moisture level
+        if (moisture < 30) {
+            progressBar.className = 'h-full bg-gradient-to-r from-red-600 to-orange-400 shadow-[0_0_10px_#ef4444] transition-all duration-1000';
+        } else if (moisture < 60) {
+            progressBar.className = 'h-full bg-gradient-to-r from-yellow-600 to-yellow-400 shadow-[0_0_10px_#eab308] transition-all duration-1000';
+        } else {
+            progressBar.className = 'h-full bg-gradient-to-r from-blue-600 to-cyan-400 shadow-[0_0_10px_#3b82f6] transition-all duration-1000';
+        }
+    }
+
+    // Update timestamp
+    const timestampElement = card.querySelector('.text-gray-500');
+    if (timestampElement && timestamp) {
+        const date = new Date(timestamp);
+        timestampElement.textContent = `Last Sync: ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    }
+
+    // Update modal if it's open for this plant
+    if (currentPlantId === plantId) {
+        const modalMoisture = document.getElementById('modal-moisture');
+        if (modalMoisture) {
+            modalMoisture.textContent = `${moisture}%`;
+        }
+    }
+}
+
+// Start polling when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('FloraVita Dashboard loaded');
+    setupMoisturePolling();
+});
 </script>
 {% endblock %}

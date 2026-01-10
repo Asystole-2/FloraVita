@@ -1,14 +1,52 @@
 import os
 import re
+import threading
+import time
+from datetime import datetime
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+# Try to import OAuth - handle gracefully if not available
+try:
+    from authlib.integrations.flask_client import OAuth
+    print("✓ OAuth imported successfully from authlib")
+except ImportError:
+    try:
+        import authlib.integrations.flask_client as flask_auth
+        OAuth = flask_auth.OAuth
+        print("✓ OAuth imported via alternative method")
+    except ImportError as e:
+        print(f"✗ Failed to import OAuth: {e}")
+        print("⚠ Google OAuth will not be available")
+        # Create a dummy class so the app doesn't crash
+        class DummyOAuth:
+            def __init__(self, app=None):
+                self.app = app
+            def register(self, **kwargs):
+                class DummyClient:
+                    def authorize_redirect(self, *args, **kwargs):
+                        return None
+                    def authorize_access_token(self):
+                        return {}
+                    def get(self, *args, **kwargs):
+                        class DummyResponse:
+                            json = lambda: {}
+                        return DummyResponse()
+                return DummyClient()
+            def init_app(self, app):
+                pass
+        OAuth = DummyOAuth
+
+# Other imports
+import pubnub
 from flask import Flask, render_template, redirect, request, session, flash, url_for, jsonify
 from flask_mysqldb import MySQL
+from pubnub.callbacks import SubscribeCallback
+from pubnub.pnconfiguration import PNConfiguration
+from pubnub.pubnub import PubNub
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import google.generativeai as genai
-from authlib.integrations.flask_client import OAuth
-from datetime import datetime
-
-# os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # Load environment variables
 load_dotenv()
@@ -26,22 +64,253 @@ app.config.update(
 )
 mysql = MySQL(app)
 
+# Initialize OAuth
+oauth = OAuth(app)
+
+# OAuth Configuration for Google Login
+google = oauth.register(
+    name='google',
+    client_id=os.getenv("GOOGLE_CLIENT_ID"),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile',
+                   'prompt': 'select_account'
+                   }
+)
+
+# PubNub Configuration for Moisture Data
+pn_config = PNConfiguration()
+pn_config.subscribe_key = os.getenv('PUBNUB_SUBSCRIBE_KEY')
+pn_config.publish_key = os.getenv('PUBNUB_PUBLISH_KEY')
+pn_config.user_id = "floravita_server"
+pubnub = PubNub(pn_config)
+
+
+class MoistureSubscriber(SubscribeCallback):
+    def message(self, pubnub, message):
+        """Handle incoming moisture data from sensors"""
+        data = message.message
+        hardware_id = data.get("hardware_id")
+        moisture = data.get("moisture")
+        status = data.get("status")
+
+        print(f"Received moisture data: {hardware_id} - {moisture}%")
+
+        # Use Flask application context
+        with app.app_context():
+            try:
+                cur = mysql.connection.cursor()
+
+                # Find which plant this hardware belongs to
+                cur.execute("SELECT id, name, moisture_threshold, user_id FROM plants WHERE hardware_id = %s",
+                            (hardware_id,))
+                plant = cur.fetchone()
+
+                if plant:
+                    plant_id = plant['id']
+                    plant_name = plant['name']
+                    threshold = plant['moisture_threshold']
+                    user_id = plant['user_id']
+
+                    # Insert moisture reading
+                    cur.execute("""
+                                INSERT INTO moisture_readings (plant_id, moisture_level, pump_status, is_automated)
+                                VALUES (%s, %s, FALSE, FALSE)
+                                """, (plant_id, moisture))
+
+                    # Update plant's last moisture
+                    cur.execute("""
+                                UPDATE plants
+                                SET last_moisture = %s,
+                                    last_update   = NOW()
+                                WHERE id = %s
+                                """, (moisture, plant_id))
+
+                    mysql.connection.commit()
+                    print(f"Updated plant {plant_id} with moisture {moisture}%")
+
+                    # Check for critically low moisture (even if not below threshold)
+                    if moisture < 20:  # Critical level
+                        create_notification(
+                            user_id,
+                            plant_id,
+                            "Critical Moisture Alert",
+                            f"{plant_name} moisture is critically low: {moisture}%. Immediate attention required!",
+                            'critical_moisture'
+                        )
+                    elif moisture < threshold:
+                        create_notification(
+                            user_id,
+                            plant_id,
+                            "Low Moisture Alert",
+                            f"{plant_name} moisture is low: {moisture}% (threshold: {threshold}%).",
+                            'low_moisture'
+                        )
+
+                        # Check if pump is already running
+                        cur.execute("""
+                                    SELECT pump_status
+                                    FROM moisture_readings
+                                    WHERE plant_id = %s
+                                    ORDER BY recorded_at DESC LIMIT 1
+                                    """, (plant_id,))
+                        last_pump_status = cur.fetchone()
+
+                        # Only trigger if pump wasn't already ON
+                        if not last_pump_status or not last_pump_status['pump_status']:
+                            # Trigger automatic watering
+                            self.trigger_automatic_watering(plant_id, plant_name, threshold, moisture)
+
+                else:
+                    print(f"No plant found with hardware_id: {hardware_id}")
+
+                cur.close()
+            except Exception as e:
+                print(f"Error updating moisture data: {e}")
+                try:
+                    mysql.connection.rollback()
+                except:
+                    pass
+
+    def trigger_automatic_watering(self, plant_id, plant_name, threshold, current_moisture):
+        """Trigger automatic watering when moisture is below threshold"""
+        try:
+            print(f"AUTO: Triggering watering for {plant_name}")
+
+            # Get user_id for notification
+            user_id = self.get_user_id_for_plant(plant_id)
+            if not user_id:
+                print(f"Could not find user for plant {plant_id}")
+                return
+
+            # 1. Send command to pump
+            pubnub.publish().channel("pump-commands").message({
+                "command": "PUMP_ON",
+                "plant_id": plant_id,
+                "plant_name": plant_name,
+                "reason": "automatic",
+                "threshold": threshold,
+                "current_moisture": current_moisture,
+                "timestamp": datetime.now().isoformat()
+            }).sync()
+
+            # 2. Log in database with is_automated = TRUE
+            with app.app_context():
+                cur = mysql.connection.cursor()
+                cur.execute("""
+                            INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
+                            VALUES (%s, TRUE, TRUE)
+                            """, (plant_id,))
+
+                # 3. Create notification for automatic watering
+                create_notification(
+                    user_id,
+                    plant_id,
+                    "Automatic Watering",
+                    f"{plant_name} was automatically watered (moisture: {current_moisture}% < threshold: {threshold}%).",
+                    'auto_watering'  # New event type
+                )
+
+                mysql.connection.commit()
+                cur.close()
+
+            print(f"Created notification for auto-watering of {plant_name}")
+
+            # Schedule pump turn off after 10 seconds
+            threading.Timer(10.0, self.turn_off_pump, args=[plant_id, plant_name, user_id]).start()
+
+        except Exception as e:
+            print(f"Error triggering automatic watering: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def turn_off_pump(self, plant_id, plant_name, user_id):
+        """Turn off pump after duration"""
+        try:
+            print(f"AUTO: Turning off pump for {plant_name}")
+
+            pubnub.publish().channel("pump-commands").message({
+                "command": "PUMP_OFF",
+                "plant_id": plant_id,
+                "plant_name": plant_name,
+                "reason": "automatic_complete",
+                "timestamp": datetime.now().isoformat()
+            }).sync()
+
+            # Log pump off in database
+            with app.app_context():
+                cur = mysql.connection.cursor()
+                cur.execute("""
+                            INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
+                            VALUES (%s, FALSE, TRUE)
+                            """, (plant_id,))
+
+                # Create notification for pump completion
+                create_notification(
+                    user_id,
+                    plant_id,
+                    "Watering Complete",
+                    f"Automatic watering for {plant_name} has completed.",
+                    'watering_complete'
+                )
+
+                mysql.connection.commit()
+                cur.close()
+
+            print(f"Created completion notification for {plant_name}")
+
+        except Exception as e:
+            print(f"Error turning off pump: {e}")
+
+    def get_user_id_for_plant(self, plant_id):
+        """Get user_id for a plant"""
+        with app.app_context():
+            try:
+                cur = mysql.connection.cursor()
+                cur.execute("SELECT user_id FROM plants WHERE id = %s", (plant_id,))
+                result = cur.fetchone()
+                cur.close()
+                return result['user_id'] if result else None
+            except Exception as e:
+                print(f"Error getting user_id for plant {plant_id}: {e}")
+                return None
+
+    def status(self, pubnub, status):
+        if status.category == "PNConnectedCategory":
+            print("PubNub Connected - Listening for moisture data")
+
+    def presence(self, pubnub, presence):
+        pass
+
+
+# Start PubNub listener in background thread
+def start_pubnub_listener():
+    """Start PubNub subscription in background thread"""
+    try:
+        listener = MoistureSubscriber()
+        pubnub.add_listener(listener)
+        pubnub.subscribe().channels("moisture-data").execute()
+        print("Moisture data listener started")
+    except Exception as e:
+        print(f"Error starting PubNub listener: {e}")
+
+
+# Start the listener when Flask starts
+with app.app_context():
+    try:
+        # Run in a separate thread to not block Flask
+        thread = threading.Thread(target=start_pubnub_listener, daemon=True)
+        thread.start()
+        time.sleep(1)  # Give it a moment to connect
+    except Exception as e:
+        print(f"Could not start PubNub listener: {e}")
+
 # Configure Gemini AI
 api_key = os.getenv("GEMINI_API_KEY")
 if not api_key:
     print("WARNING: GEMINI_API_KEY not found in .env file!")
 genai.configure(api_key=api_key)
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
-
-# OAuth Configuration for Google Login
-oauth = OAuth(app)
-google = oauth.register(
-    name='google',
-    client_id=os.getenv("GOOGLE_CLIENT_ID"),
-    client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
-    client_kwargs={'scope': 'openid email profile'}
-)
 
 
 def login_required(f):
@@ -179,40 +448,137 @@ def login():
 # Google Login OAuth Routes
 @app.route('/login/google')
 def google_login():
+
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+
     redirect_uri = url_for('google_authorize', _external=True)
     return google.authorize_redirect(redirect_uri)
 
 
 @app.route('/authorize')
 def google_authorize():
-    token = google.authorize_access_token()
-    user_info = token.get('userinfo')
-    if user_info:
-        email = user_info['email']
+
+    try:
+        # Fetch access token
+        token = google.authorize_access_token()
+
+        # Get user info
+        user_info = google.get('https://www.googleapis.com/oauth2/v3/userinfo').json()
+
+        if not user_info:
+            flash("Failed to retrieve user information from Google.", "error")
+            return redirect(url_for('login'))
+
+        email = user_info.get('email')
+        google_id = user_info.get('sub')
+        name = user_info.get('name')
+        picture = user_info.get('picture')
+
+        if not email:
+            flash("Google account email is required.", "error")
+            return redirect(url_for('login'))
+
         cur = mysql.connection.cursor()
+
+        # Check if user exists
         cur.execute("SELECT id, username, role FROM users WHERE email = %s", (email,))
         user = cur.fetchone()
 
         if not user:
-            # Create user if not exists (Oauth flow)
-            username = email.split('@')[0]
-            temp_pw = generate_password_hash(os.urandom(24).hex())
-            cur.execute("INSERT INTO users (username, email, password) VALUES (%s, %s, %s)",
-                        (username, email, temp_pw))
+            # Create new user
+            # Generate username from email if name not available
+            username = name.lower().replace(' ', '_') if name else email.split('@')[0]
+
+            # Ensure username is unique
+            base_username = username
+            counter = 1
+            while True:
+                cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+                if not cur.fetchone():
+                    break
+                username = f"{base_username}_{counter}"
+                counter += 1
+
+            # Create user with Google OAuth data
+            cur.execute("""
+                        INSERT INTO users (username, email, password, role, google_id, profile_picture)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (username, email, generate_password_hash(os.urandom(24).hex()), 'user', google_id, picture))
+
             mysql.connection.commit()
+
+            # Get the new user
             cur.execute("SELECT id, username, role FROM users WHERE email = %s", (email,))
             user = cur.fetchone()
 
+        # Set session
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         session["role"] = user["role"]
+
         cur.close()
-        flash("Logged in with Google!", "success")
+
+        flash("Successfully logged in with Google!", "success")
         return redirect(url_for("dashboard"))
 
-    flash("Google authentication failed.", "error")
-    return redirect(url_for("login"))
+    except Exception as e:
+        print(f"Google OAuth error: {e}")
+        flash("Google authentication failed. Please try again.", "error")
+        return redirect(url_for("login"))
 
+
+# Helper functions
+def check_google_user(email):
+    """Check if a Google user exists in the database"""
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT id, username, role FROM users WHERE email = %s", (email,))
+        return cur.fetchone()
+    finally:
+        cur.close()
+
+
+def create_google_user(email, google_id, name, picture):
+    """Create a new user from Google OAuth data"""
+    cur = mysql.connection.cursor()
+    try:
+        username = name.lower().replace(' ', '_') if name else email.split('@')[0]
+
+        # Ensure unique username
+        base_username = username
+        counter = 1
+        while True:
+            cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+            if not cur.fetchone():
+                break
+            username = f"{base_username}_{counter}"
+            counter += 1
+
+        cur.execute("""
+                    INSERT INTO users (username, email, password, role, google_id, profile_picture)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (username, email, generate_password_hash(os.urandom(24).hex()), 'user', google_id, picture))
+
+        mysql.connection.commit()
+        return username
+    finally:
+        cur.close()
+
+
+@app.route('/login/google/cancel')
+def google_login_cancel():
+    """Handle when user cancels Google login"""
+    flash("Google login was cancelled.", "info")
+    return redirect(url_for('login'))
+
+
+@app.route('/logout/google')
+def google_logout():
+    session.clear()
+    flash("Logged out successfully.", "success")
+    return redirect(url_for('index'))
 
 @app.route("/logout")
 def logout():
@@ -225,6 +591,10 @@ def logout():
 
 def create_notification(user_id, plant_id, title, message, event_type):
     """Inserts a new notification and marks it as unread."""
+    if not user_id:
+        print(f"Cannot create notification: No user_id for plant {plant_id}")
+        return
+
     cur = mysql.connection.cursor()
     try:
         cur.execute("""
@@ -232,6 +602,10 @@ def create_notification(user_id, plant_id, title, message, event_type):
                     VALUES (%s, %s, %s, %s, %s, FALSE)
                     """, (user_id, plant_id, title, message, event_type))
         mysql.connection.commit()
+        print(f"Notification created: {title}")
+    except Exception as e:
+        print(f"Error creating notification: {e}")
+        mysql.connection.rollback()
     finally:
         cur.close()
 
@@ -479,6 +853,7 @@ def delete_all_notifications():
         if cur:
             cur.close()
 
+
 @app.route("/update-threshold/<int:plant_id>", methods=["POST"])
 @login_required
 def update_threshold(plant_id):
@@ -505,28 +880,40 @@ def update_threshold(plant_id):
 @login_required
 def toggle_pump(plant_id):
     data = request.get_json()
-    is_active = data.get('active', False)  # Determine if starting or stopping
+    is_active = data.get('active', False)
+    duration = data.get('duration', 10)
 
     cur = mysql.connection.cursor()
     try:
+        # 1. Authorization Check
         cur.execute("SELECT name FROM plants WHERE id = %s AND user_id = %s", (plant_id, session['user_id']))
         plant = cur.fetchone()
 
         if not plant:
             return {"status": "error", "message": "Unauthorized"}, 404
 
+        # 2. Hardware Command (PubNub)
+        command = "PUMP_ON" if is_active else "PUMP_OFF"
+        pubnub.publish().channel("pump-commands").message({
+            "command": command,
+            "plant_id": plant_id,
+            "plant_name": plant['name'],
+            "reason": "manual",
+            "duration": duration if is_active else 0,
+            "timestamp": datetime.now().isoformat()
+        }).sync()
+
         if is_active:
-            title = "Manual Watering"
-            message = f"Irrigation for {plant['name']} triggered manually at {datetime.now().strftime('%H:%M')}."
+            title = "Manual Watering Started"
+            message = f"Irrigation for {plant['name']} triggered manually for {duration} seconds."
             event_type = 'manual_watering'
         else:
-            title = "Pump Deactivated"
-            message = f"Manual irrigation for {plant['name']} was stopped at {datetime.now().strftime('%H:%M')}."
-            event_type = 'system'  # Or a custom 'pump_stop' type
+            title = "Manual Watering Stopped"
+            message = f"Manual irrigation for {plant['name']} was stopped."
+            event_type = 'manual_stop'
 
         create_notification(session['user_id'], plant_id, title, message, event_type)
 
-        # Log the state change in readings
         cur.execute("""
                     INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
                     VALUES (%s, %s, FALSE)
@@ -534,8 +921,26 @@ def toggle_pump(plant_id):
 
         mysql.connection.commit()
         return {"status": "success"}
+
+    except Exception as e:
+        mysql.connection.rollback()
+        return {"status": "error", "message": str(e)}, 500
     finally:
         cur.close()
+
+
+def send_pump_off_command(plant_id, plant_name):
+    """Helper function to send pump off command after duration"""
+    try:
+        pubnub.publish().channel("pump-commands").message({
+            "command": "PUMP_OFF",
+            "plant_id": plant_id,
+            "plant_name": plant_name,
+            "reason": "manual_complete",
+            "timestamp": datetime.now().isoformat()
+        }).sync()
+    except Exception as e:
+        print(f"Error sending pump off command: {e}")
 
 
 # --- Dashboard & Plant Management ---
@@ -544,16 +949,86 @@ def toggle_pump(plant_id):
 def dashboard():
     user_id = session.get("user_id")
     cur = mysql.connection.cursor()
-    cur.execute("""
-                SELECT p.*, MAX(m.moisture_level) as last_moisture, MAX(m.recorded_at) as last_update
-                FROM plants p
-                         LEFT JOIN moisture_readings m ON p.id = m.plant_id
-                WHERE p.user_id = %s
-                GROUP BY p.id
-                """, (user_id,))
-    user_plants = cur.fetchall()
-    cur.close()
-    return render_template("dashboard.html", plants=user_plants, active_page="dashboard")
+
+    try:
+        # Get plants with their latest moisture readings
+        cur.execute("""
+                    SELECT p.*,
+                           COALESCE(
+                                   (SELECT m.moisture_level
+                                    FROM moisture_readings m
+                                    WHERE m.plant_id = p.id
+                                    ORDER BY m.recorded_at DESC
+                                   LIMIT 1), 
+                    0
+                )                                           as last_moisture,
+                           COALESCE(
+                                   (SELECT m.recorded_at
+                                    FROM moisture_readings m
+                                    WHERE m.plant_id = p.id
+                                    ORDER BY m.recorded_at DESC
+                                   LIMIT 1), 
+                    p.created_at
+                ) as last_update
+                    FROM plants p
+                    WHERE p.user_id = %s
+                    ORDER BY p.id
+                    """, (user_id,))
+
+        user_plants = cur.fetchall()
+        cur.close()
+
+        # Debug output
+        print(f"Dashboard: Found {len(user_plants)} plants for user {user_id}")
+        for plant in user_plants:
+            print(f"  - {plant['name']}: {plant['last_moisture']}% (updated: {plant['last_update']})")
+
+        return render_template("dashboard.html", plants=user_plants, active_page="dashboard")
+
+    except Exception as e:
+        print(f"❌ Error in dashboard route: {e}")
+        flash("Error loading dashboard", "error")
+        return redirect(url_for("index"))
+
+
+@app.route("/api/latest-moisture")
+@login_required
+def get_latest_moisture():
+    """Get latest moisture readings for all user's plants"""
+    user_id = session.get("user_id")
+    cur = mysql.connection.cursor()
+
+    try:
+        # Get plants with their latest moisture data
+        cur.execute("""
+                    SELECT p.id                         as plant_id,
+                           p.name,
+                           COALESCE(p.last_moisture, 0) as moisture,
+                           p.last_update as timestamp
+                    FROM plants p
+                    WHERE p.user_id = %s
+                    ORDER BY p.id
+                    """, (user_id,))
+
+        updates = cur.fetchall()
+
+        return jsonify({
+            "success": True,
+            "updates": [
+                {
+                    "plant_id": row['plant_id'],
+                    "moisture": float(row['moisture']),
+                    "timestamp": row['timestamp'].isoformat() if row['timestamp'] else None,
+                    "plant_name": row['name']
+                }
+                for row in updates
+            ]
+        })
+    except Exception as e:
+        print(f"Error in get_latest_moisture: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        cur.close()
 
 
 @app.route("/plant/<int:plant_id>")
@@ -721,14 +1196,15 @@ def add_plant():
     name = request.form.get("plant_name")
     location = request.form.get("location")
     threshold = request.form.get("threshold", 30)
+    hardware_id = request.form.get("hardware_id")
     user_id = session.get("user_id")
 
     cur = mysql.connection.cursor()
     try:
         cur.execute("""
-                    INSERT INTO plants (name, location, moisture_threshold, user_id)
-                    VALUES (%s, %s, %s, %s)
-                    """, (name, location, threshold, user_id))
+                    INSERT INTO plants (name, location, moisture_threshold, user_id, hardware_id)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """, (name, location, threshold, user_id, hardware_id))
         mysql.connection.commit()
         flash("Ecosystem Updated: New botanical device synchronized.", "success")
     except Exception as e:
