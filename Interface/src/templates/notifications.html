@@ -70,8 +70,12 @@
                             class="appearance-none bg-black/40 border border-white/5 rounded-xl pl-10 pr-8 py-2.5 text-[10px] font-bold uppercase tracking-widest text-gray-300 outline-none focus:border-blue-500/50 transition-all">
                         <option value="all">All Event Types</option>
                         <option value="manual_watering">Manual Watering</option>
+                        <option value="manual_stop">Manual Stop</option>
+                        <option value="auto_watering">Automatic Watering</option>
                         <option value="threshold_update">Threshold Changes</option>
                         <option value="low_moisture">Low Moisture Alerts</option>
+                        <option value="critical_moisture">Critical Alerts</option>
+                        <option value="watering_complete">Watering Complete</option>
                         <option value="system">System Events</option>
                     </select>
                 </div>
@@ -133,10 +137,34 @@
                         </h3>
                         <p class="text-gray-400 text-sm leading-relaxed mb-4 max-w-2xl">{{ n.message }}</p>
                         <div class="flex items-center gap-6 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-                            <span class="flex items-center gap-2"><i class="far fa-clock"></i> {{ n.created_at.strftime('%H:%M • %b %d') }}</span>
+                                    <span class="flex items-center gap-2">
+                                        <i class="far fa-clock"></i>
+                                        {{ n.created_at.strftime('%H:%M • %b %d') }}
+                                    </span>
                             {% if n.plant_name %}
-                            <span class="flex items-center gap-2 text-blue-400/80"><i class="fas fa-tag"></i> {{ n.plant_name }}</span>
+                            <span class="flex items-center gap-2 text-blue-400/80">
+                                        <i class="fas fa-tag"></i>
+                                        {{ n.plant_name }}
+                                    </span>
                             {% endif %}
+                            <span class="flex items-center gap-2
+                                {% if n.event_type == 'low_moisture' or n.event_type == 'critical_moisture' %}text-red-400/80
+                                {% elif n.event_type == 'manual_watering' or n.event_type == 'auto_watering' %}text-blue-400/80
+                                {% elif n.event_type == 'threshold_update' %}text-emerald-400/80
+                                {% else %}text-gray-500{% endif %}">
+                                {% if n.event_type == 'low_moisture' or n.event_type == 'critical_moisture' %}
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                {% elif n.event_type == 'manual_watering' %}
+                                    <i class="fas fa-hand-point-up"></i>
+                                {% elif n.event_type == 'auto_watering' %}
+                                    <i class="fas fa-robot"></i>
+                                {% elif n.event_type == 'threshold_update' %}
+                                    <i class="fas fa-sliders-h"></i>
+                                {% else %}
+                                    <i class="fas fa-cog"></i>
+                                {% endif %}
+                                {{ n.event_type.replace('_', ' ').title() }}
+                            </span>
                         </div>
                     </div>
                     <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -1,6 +1,8 @@
 import os
 import re
 import threading
+import time
+from datetime import datetime
 import google
 # from authlib.integrations.flask_client import OAuth
 import pubnub
@@ -12,7 +14,6 @@ from pubnub.pubnub import PubNub
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 import google.generativeai as genai
-from datetime import datetime, time
 
 # os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
@@ -56,11 +57,15 @@ class MoistureSubscriber(SubscribeCallback):
                 cur = mysql.connection.cursor()
 
                 # Find which plant this hardware belongs to
-                cur.execute("SELECT id FROM plants WHERE hardware_id = %s", (hardware_id,))
+                cur.execute("SELECT id, name, moisture_threshold, user_id FROM plants WHERE hardware_id = %s",
+                            (hardware_id,))
                 plant = cur.fetchone()
 
                 if plant:
                     plant_id = plant['id']
+                    plant_name = plant['name']
+                    threshold = plant['moisture_threshold']
+                    user_id = plant['user_id']
 
                     # Insert moisture reading
                     cur.execute("""
@@ -78,6 +83,39 @@ class MoistureSubscriber(SubscribeCallback):
 
                     mysql.connection.commit()
                     print(f"Updated plant {plant_id} with moisture {moisture}%")
+
+                    # Check for critically low moisture (even if not below threshold)
+                    if moisture < 20:  # Critical level
+                        create_notification(
+                            user_id,
+                            plant_id,
+                            "Critical Moisture Alert",
+                            f"{plant_name} moisture is critically low: {moisture}%. Immediate attention required!",
+                            'critical_moisture'
+                        )
+                    elif moisture < threshold:
+                        create_notification(
+                            user_id,
+                            plant_id,
+                            "Low Moisture Alert",
+                            f"{plant_name} moisture is low: {moisture}% (threshold: {threshold}%).",
+                            'low_moisture'
+                        )
+
+                        # Check if pump is already running
+                        cur.execute("""
+                                    SELECT pump_status
+                                    FROM moisture_readings
+                                    WHERE plant_id = %s
+                                    ORDER BY recorded_at DESC LIMIT 1
+                                    """, (plant_id,))
+                        last_pump_status = cur.fetchone()
+
+                        # Only trigger if pump wasn't already ON
+                        if not last_pump_status or not last_pump_status['pump_status']:
+                            # Trigger automatic watering
+                            self.trigger_automatic_watering(plant_id, plant_name, threshold, moisture)
+
                 else:
                     print(f"No plant found with hardware_id: {hardware_id}")
 
@@ -89,12 +127,116 @@ class MoistureSubscriber(SubscribeCallback):
                 except:
                     pass
 
+    def trigger_automatic_watering(self, plant_id, plant_name, threshold, current_moisture):
+        """Trigger automatic watering when moisture is below threshold"""
+        try:
+            print(f"AUTO: Triggering watering for {plant_name}")
+
+            # Get user_id for notification
+            user_id = self.get_user_id_for_plant(plant_id)
+            if not user_id:
+                print(f"Could not find user for plant {plant_id}")
+                return
+
+            # 1. Send command to pump
+            pubnub.publish().channel("pump-commands").message({
+                "command": "PUMP_ON",
+                "plant_id": plant_id,
+                "plant_name": plant_name,
+                "reason": "automatic",
+                "threshold": threshold,
+                "current_moisture": current_moisture,
+                "timestamp": datetime.now().isoformat()
+            }).sync()
+
+            # 2. Log in database with is_automated = TRUE
+            with app.app_context():
+                cur = mysql.connection.cursor()
+                cur.execute("""
+                            INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
+                            VALUES (%s, TRUE, TRUE)
+                            """, (plant_id,))
+
+                # 3. Create notification for automatic watering
+                create_notification(
+                    user_id,
+                    plant_id,
+                    "Automatic Watering",
+                    f"{plant_name} was automatically watered (moisture: {current_moisture}% < threshold: {threshold}%).",
+                    'auto_watering'  # New event type
+                )
+
+                mysql.connection.commit()
+                cur.close()
+
+            print(f"Created notification for auto-watering of {plant_name}")
+
+            # Schedule pump turn off after 10 seconds
+            threading.Timer(10.0, self.turn_off_pump, args=[plant_id, plant_name, user_id]).start()
+
+        except Exception as e:
+            print(f"Error triggering automatic watering: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def turn_off_pump(self, plant_id, plant_name, user_id):
+        """Turn off pump after duration"""
+        try:
+            print(f"AUTO: Turning off pump for {plant_name}")
+
+            pubnub.publish().channel("pump-commands").message({
+                "command": "PUMP_OFF",
+                "plant_id": plant_id,
+                "plant_name": plant_name,
+                "reason": "automatic_complete",
+                "timestamp": datetime.now().isoformat()
+            }).sync()
+
+            # Log pump off in database
+            with app.app_context():
+                cur = mysql.connection.cursor()
+                cur.execute("""
+                            INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
+                            VALUES (%s, FALSE, TRUE)
+                            """, (plant_id,))
+
+                # Create notification for pump completion
+                create_notification(
+                    user_id,
+                    plant_id,
+                    "Watering Complete",
+                    f"Automatic watering for {plant_name} has completed.",
+                    'watering_complete'
+                )
+
+                mysql.connection.commit()
+                cur.close()
+
+            print(f"Created completion notification for {plant_name}")
+
+        except Exception as e:
+            print(f"Error turning off pump: {e}")
+
+    def get_user_id_for_plant(self, plant_id):
+        """Get user_id for a plant"""
+        with app.app_context():
+            try:
+                cur = mysql.connection.cursor()
+                cur.execute("SELECT user_id FROM plants WHERE id = %s", (plant_id,))
+                result = cur.fetchone()
+                cur.close()
+                return result['user_id'] if result else None
+            except Exception as e:
+                print(f"Error getting user_id for plant {plant_id}: {e}")
+                return None
+
     def status(self, pubnub, status):
         if status.category == "PNConnectedCategory":
             print("PubNub Connected - Listening for moisture data")
 
     def presence(self, pubnub, presence):
         pass
+
 
 # Start PubNub listener in background thread
 def start_pubnub_listener():
@@ -124,6 +266,7 @@ if not api_key:
     print("WARNING: GEMINI_API_KEY not found in .env file!")
 genai.configure(api_key=api_key)
 ai_model = genai.GenerativeModel('gemini-1.5-flash')
+
 
 # OAuth Configuration for Google Login
 # google = oauth.register(
@@ -316,6 +459,10 @@ def logout():
 
 def create_notification(user_id, plant_id, title, message, event_type):
     """Inserts a new notification and marks it as unread."""
+    if not user_id:
+        print(f"Cannot create notification: No user_id for plant {plant_id}")
+        return
+
     cur = mysql.connection.cursor()
     try:
         cur.execute("""
@@ -323,6 +470,10 @@ def create_notification(user_id, plant_id, title, message, event_type):
                     VALUES (%s, %s, %s, %s, %s, FALSE)
                     """, (user_id, plant_id, title, message, event_type))
         mysql.connection.commit()
+        print(f"Notification created: {title}")
+    except Exception as e:
+        print(f"Error creating notification: {e}")
+        mysql.connection.rollback()
     finally:
         cur.close()
 
@@ -570,6 +721,7 @@ def delete_all_notifications():
         if cur:
             cur.close()
 
+
 @app.route("/update-threshold/<int:plant_id>", methods=["POST"])
 @login_required
 def update_threshold(plant_id):
@@ -591,11 +743,13 @@ def update_threshold(plant_id):
     finally:
         cur.close()
 
+
 @app.route("/toggle-pump/<int:plant_id>", methods=["POST"])
 @login_required
 def toggle_pump(plant_id):
     data = request.get_json()
-    is_active = data.get('active', False)  # Determine if starting or stopping
+    is_active = data.get('active', False)
+    duration = data.get('duration', 10)
 
     cur = mysql.connection.cursor()
     try:
@@ -607,28 +761,27 @@ def toggle_pump(plant_id):
             return {"status": "error", "message": "Unauthorized"}, 404
 
         # 2. Hardware Command (PubNub)
-        # Sends real-time instruction to the Raspberry Pi subscriber
         command = "PUMP_ON" if is_active else "PUMP_OFF"
         pubnub.publish().channel("pump-commands").message({
             "command": command,
             "plant_id": plant_id,
+            "plant_name": plant['name'],
+            "reason": "manual",
+            "duration": duration if is_active else 0,
             "timestamp": datetime.now().isoformat()
         }).sync()
 
-        # Notification Logic
         if is_active:
-            title = "Manual Watering"
-            message = f"Irrigation for {plant['name']} triggered manually at {datetime.now().strftime('%H:%M')}."
+            title = "Manual Watering Started"
+            message = f"Irrigation for {plant['name']} triggered manually for {duration} seconds."
             event_type = 'manual_watering'
         else:
-            title = "Pump Deactivated"
-            message = f"Manual irrigation for {plant['name']} was stopped at {datetime.now().strftime('%H:%M')}."
-            event_type = 'system'
+            title = "Manual Watering Stopped"
+            message = f"Manual irrigation for {plant['name']} was stopped."
+            event_type = 'manual_stop'
 
         create_notification(session['user_id'], plant_id, title, message, event_type)
 
-        # Database Persistence
-        # Logs the state change so the UI charts reflect the activity
         cur.execute("""
                     INSERT INTO moisture_readings (plant_id, pump_status, is_automated)
                     VALUES (%s, %s, FALSE)
@@ -642,6 +795,20 @@ def toggle_pump(plant_id):
         return {"status": "error", "message": str(e)}, 500
     finally:
         cur.close()
+
+
+def send_pump_off_command(plant_id, plant_name):
+    """Helper function to send pump off command after duration"""
+    try:
+        pubnub.publish().channel("pump-commands").message({
+            "command": "PUMP_OFF",
+            "plant_id": plant_id,
+            "plant_name": plant_name,
+            "reason": "manual_complete",
+            "timestamp": datetime.now().isoformat()
+        }).sync()
+    except Exception as e:
+        print(f"Error sending pump off command: {e}")
 
 
 # --- Dashboard & Plant Management ---
@@ -730,6 +897,7 @@ def get_latest_moisture():
         return jsonify({"success": False, "error": str(e)}), 500
     finally:
         cur.close()
+
 
 @app.route("/plant/<int:plant_id>")
 @login_required
@@ -912,6 +1080,7 @@ def add_plant():
     finally:
         cur.close()
     return redirect(url_for("settings"))
+
 
 @app.route("/remove-plant-photo/<int:plant_id>", methods=["POST"])
 @login_required

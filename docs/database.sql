@@ -137,3 +137,7 @@ ENUM('low_moisture', 'auto_watering', 'manual_watering', 'threshold_update', 'sy
 
 -- Edit for adding new device for plants configuration
 ALTER TABLE plants ADD COLUMN hardware_id VARCHAR(50) UNIQUE AFTER user_id;
+
+-- time for watering
+ALTER TABLE plants
+ADD COLUMN watering_duration INT DEFAULT 10 AFTER moisture_threshold;
