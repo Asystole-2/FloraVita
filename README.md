@@ -41,36 +41,8 @@ An IoT-based smart irrigation system that monitors soil moisture and automatical
 
 ### Wiring Diagram
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ RASPBERRY PI 4 │
-│ │
-│ PIN 1 (3.3V) ──────────────────────┐ │
-│ PIN 6 (GND) ──────────────────────┬─────────────────┐ │
-│ PIN 11 (GPIO 17) ───────────────────┤ │ │
-│ PIN 13 (GPIO 27) ───────────────────┤ │ │
-│ PIN 2 (5V) ─────────────────────┤ │ │
-│ PIN 14 (GND) ─────────────────────┤ │ │
-└──────────────────────────────────────┴─────────────────┴───┘
-│ │ │ │ │
-│ │ │ │ │
-▼ ▼ ▼ ▼ ▼
-┌──────────────┐ ┌─────────────────┐ ┌─────────────────────┐
-│ SOIL SENSOR │ │ RELAY MODULE │ │ BATTERY PACK │
-│ │ │ │ │ │
-│ VCC ─────────┘ │ VCC ────────────┘ │ + ────────────────┘
-│ GND ────────────┤ GND ───────────────┤ │
-│ OUT ────────────┤ IN1 ───────────────┘ │
-└─────────────────┤ COM ─────────────────────────────────────┘
-│ NO ──────┐ │
-└───────────┴──────────────────────────────┘
-│
-▼
-┌──────────────┐
-│ WATER PUMP │
-│ │
-│ + ──────────┘
-│ - ──────────────────────────────┐
-└──────────────────────────────────┘
+<img width="1034" height="710" alt="image" src="https://github.com/user-attachments/assets/e63fcf8e-1ee1-4ccf-ae62-60743b2d5158" />
+
 ```
 
 ### Step-by-Step Wiring Instructions
@@ -299,28 +271,8 @@ Regular security updates
 
 ### 📈 Data Flow Architecture
 ```
-┌─────────────────┐    PUBLISH    ┌─────────────────┐    HTTP     ┌─────────────────┐
-│   IoT DEVICE    ├──────────────►│    PUBNUB       ├────────────►│  WEB DASHBOARD  │
-│  (Raspberry Pi) │   Moisture    │    CLOUD        │   Display   │   (User View)   │
-│                 │   Readings    │                 │   Data      │                 │
-│  Sensor → GPIO  │               │  Channels:      │             │  Charts & UI    │
-│  Pump ← Relay   │               │  - plant-       │             │  Controls       │
-└────────┬────────┘               │    moisture-data│             └────────┬────────┘
-         │                        │  - plant-       │                      │
-         │      SUBSCRIBE         │    pump-commands│              User Action
-         └────────────────────────┘                 │            (Click "Water Now")
-                    Pump Commands └─────────────────┘                      │
-                                                                             ▼
-                                                                   ┌─────────────────┐
-                                                                   │    PUBNUB       │
-                                                                   │    CLOUD        │
-                                                                   │                 │
-                                                                   │  Command:       │
-                                                                   │  {"command":    │
-                                                                   │   "WATER_NOW",  │
-                                                                   │   "duration":   │
-                                                                   │    3000}        │
-                                                                   └─────────────────┘
+
+<img width="803" height="697" alt="Screenshot 2026-01-11 174119" src="https://github.com/user-attachments/assets/a86343ad-eea9-4514-b7ba-4d2e310674a5" />
 
   ```                                                                 
 
