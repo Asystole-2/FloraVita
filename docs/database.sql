@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('admin', 'technician', 'user') DEFAULT 'user',
     first_name VARCHAR(50),
     last_name VARCHAR(50),
-    bio TEXT,
     profile_picture VARCHAR(255) DEFAULT 'default_profile.png',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
