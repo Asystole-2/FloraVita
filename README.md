@@ -30,7 +30,7 @@ An IoT-based smart irrigation system that monitors soil moisture and automatical
 
 The system uses a distributed architecture where the sensor and the actuator (pump) are managed by different hardware nodes communicating via PubNub.
 
-<img width="803" height="697" alt="System Architecture" src="https://github.com/user-attachments/assets/a86343ad-eea9-4514-b7ba-4d2e310674a5" />
+<img width="1009" height="692" alt="System Arcgitecture" src="https://github.com/user-attachments/assets/ee96b1b3-b8ce-46cc-93e8-0be6f4b8fc7b" />
 
 1. **Input**: Capacitive Soil Moisture Sensor connected to the **Laptop** (via Arduino/Serial).
 2. **Logic/Cloud**: Laptop publishes data to **PubNub**.
@@ -60,7 +60,8 @@ The system uses a MySQL database to manage users, track plant health, and log al
 
 ### Entity Relationship Diagram (ERD)
 
-<img width="803" height="697" alt="ERD" src="https://github.com/user-attachments/assets/141c2e0b-74af-4d6e-a7be-2b8368d08e12" />
+<img width="1298" height="716" alt="ERD" src="https://github.com/user-attachments/assets/9a14a12b-302a-4b91-a2e8-d5c6690c8ea3" />
+
 
 ### SQL Setup Script
 
