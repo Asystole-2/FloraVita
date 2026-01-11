@@ -45,30 +45,6 @@ An IoT-based smart irrigation system that monitors soil moisture and automatical
 
 ```
 
-### Step-by-Step Wiring Instructions
-
-1. **Soil Moisture Sensor:**
-   - Red wire (VCC) → Raspberry Pi Pin 1 (3.3V)
-   - Black wire (GND) → Raspberry Pi Pin 6 (GND)
-   - Yellow wire (OUT) → Raspberry Pi Pin 11 (GPIO 17)
-
-2. **Relay Module:**
-   - VCC pin → Raspberry Pi Pin 2 (5V)
-   - GND pin → Raspberry Pi Pin 14 (GND)
-   - IN1 pin → Raspberry Pi Pin 13 (GPIO 27)
-
-3. **Battery Pack:**
-   - Positive (+) wire → Relay COM terminal
-   - Negative (-) wire → Pump negative (-) terminal
-
-4. **Water Pump:**
-   - Positive (+) wire → Relay NO (Normally Open) terminal
-   - Negative (-) wire → Battery pack negative (-) terminal
-
-5. **Add Safety Components (Recommended):**
-   - Place a 1A fuse in series with battery positive wire
-   - Add a 1N4001 diode across pump terminals (cathode to +, anode to -)
-
 ### Important Safety Notes
 
 ⚠️ **CRITICAL SAFETY MEASURES:**
@@ -76,7 +52,6 @@ An IoT-based smart irrigation system that monitors soil moisture and automatical
 2. **Isolate power** - Use separate batteries for pump vs Raspberry Pi
 3. **Waterproof connections** if used outdoors
 4. **Test with water** in sink before connecting to plants
-5. **Add fuse** (1A) for pump circuit protection
 
 ## 📡 PubNub Setup
 
@@ -153,92 +128,7 @@ source venv/bin/activate
 ## Install Python packages
 pip install pubnub RPi.GPIO python-dotenv
 
-## Install Node.js (for web dashboard)
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-
-## Install Node dependencies
-cd web-dashboard
-npm install
 ```
-### 4. Configuration
- Copy example config: `cp iot-device/config.example.json iot-device/config.json`
-
- Edit iot-device/config.json:
-```
-{
-  "pubnub": {
-    "publish_key": "pub-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "subscribe_key": "sub-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "secret_key": "sec-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "user_id": "plant_irrigation_system_001"
-  },
-  "device": {
-    "moisture_threshold": 30,
-    "pump_duration": 3000,
-    "check_interval": 60,
-    "sensor_pin": 17,
-    "relay_pin": 27
-  },
-  "channels": {
-    "moisture_data": "plant-moisture-data",
-    "pump_commands": "plant-pump-commands"
-  }
-}
-```
-### Enable GPIO Access
-# Add user to GPIO group
-sudo usermod -a -G gpio $USER
-
-# Reboot for changes to take effect
-sudo reboot
-
-### 🚀 Usage
-```
-# Running the IoT Device:
-cd iot-device
-source ../venv/bin/activate
-python3 main.py
-
-# Running the Web Dashboard:
-cd web-dashboard
-npm start
-# Access at http://localhost:3000
-
-# Testing Hardware
-# Test sensor reading
-python3 tests/test_sensor.py
-
-# Test pump activation
-python3 tests/test_pump.py --duration 2000
-
-# Test PubNub connection
-python3 tests/test_pubnub.py
-```
-
-### 📊 Project Structure
-```
-smart-plant-irrigation/
-├── docs/
-│   ├── hardware_setup.md
-│   └── wiring_diagrams/  #### Fritzing diagrams
-├── iot-device/           #### Raspberry Pi code
-│   ├── main.py          #### Main control logic
-│   ├── sensor.py        #### Soil sensor reading
-│   ├── pump.py          #### Pump control logic
-│   ├── pubnub_client.py #### PubNub communication
-│   └── config.json      #### Configuration (DO NOT COMMIT)
-├── tests/               #### Hardware/software tests
-├── web-dashboard/       #### React dashboard
-│   ├── src/
-│   │   ├── components/
-│   │   ├── services/
-│   │   └── App.js
-│   └── package.json
-├── .gitignore
-└── README.md
-```
-
 ### 🔒 Security Features
 1. PubNub PAM (Access Manager)
 Device-specific auth keys
