@@ -1,171 +1,174 @@
 # 🌱 Smart Automated Plant Irrigation System
 
-An IoT-based smart irrigation system that monitors soil moisture and automatically waters plants with manual override capability via web dashboard.
+An IoT-based smart irrigation system that monitors soil moisture and automatically waters plants with manual override capability via a web dashboard.
+
+## 🔗 Live Project
+
+> **Live Website:** (https://flrvta.eu/)
 
 ## 📋 Table of Contents
-- [Features](#-features)
-- [Hardware Setup](#-hardware-setup)
-- [PubNub Setup](#-pubnub-setup)
-- [Installation](#-installation)
-- [Usage](#-usage)
-- [Project Structure](#-project-structure)
-- [Security](#-security-features)
-- [Data Flow](#-data-flow-architecture)
+
+* [Features](https://www.google.com/search?q=%23-features)
+* [System Architecture](https://www.google.com/search?q=%23-system-architecture)
+* [Hardware Setup](https://www.google.com/search?q=%23-hardware-setup)
+* [Database Design](https://www.google.com/search?q=%23-database-design)
+* [PubNub Setup](https://www.google.com/search?q=%23-pubnub-setup)
+* [Installation](https://www.google.com/search?q=%23-installation)
+* [Security](https://www.google.com/search?q=%23-security-features)
+* [Data Flow](#-data-flow-architecture)
 
 
 ## 🚀 Features
 
-- **Real-time Monitoring**: Continuous soil moisture tracking
-- **Automated Watering**: Triggers pump when moisture falls below threshold
-- **Manual Control**: Web dashboard with "Water Now" button
-- **Historical Data**: Visualize moisture trends over time
-- **Security**: PubNub PAM security for command channels
+* **Real-time Monitoring**: Continuous soil moisture tracking.
+* **Automated Watering**: Triggers pump when moisture falls below a set threshold.
+* **Manual Control**: Web dashboard with a "Water Now" button.
+* **Historical Data**: MySQL storage to visualize moisture trends and pump logs.
+* **Hybrid IoT**: Sensor data sent via Laptop; Pump controlled via Raspberry Pi.
+
+## 📈 System Architecture
+
+The system uses a distributed architecture where the sensor and the actuator (pump) are managed by different hardware nodes communicating via PubNub.
+
+<img width="803" height="697" alt="System Architecture" src="https://github.com/user-attachments/assets/a86343ad-eea9-4514-b7ba-4d2e310674a5" />
+
+1. **Input**: Capacitive Soil Moisture Sensor connected to the **Laptop** (via Arduino/Serial).
+2. **Logic/Cloud**: Laptop publishes data to **PubNub**.
+3. **Storage**: **MySQL** stores historical readings and notifications.
+4. **Output**: **Raspberry Pi** subscribes to PubNub commands to trigger the Relay and Pump.
 
 ## 🔌 Hardware Setup
 
 ### Complete Component List
 
-| Component | Quantity | Purpose | Irish Supplier |
-|-----------|----------|---------|----------------|
-| Raspberry Pi 4 | 1 | Main controller | Already have |
-| Capacitive Soil Moisture Sensor | 1 | Measures soil moisture | [Hobby Components](https://www.hobbycomponents.com/sensors/539-capacitive-soil-moisture-sensor-v20) |
-| 5V 1-Channel Relay Module | 1 | Safely controls water pump | [Cool Components](https://coolcomponents.ie/products/1-channel-relay-module) |
-| Mini Submersible Pump (3-6V) | 1 | Water delivery | [Amazon UK](https://www.amazon.co.uk/Makerfire-Submersible-Micro-Water-Pump/dp/B01N6RZQOV) |
-| 4x AA Battery Holder with Switch | 1 | Isolated pump power | [RadioParts](https://radioparts.ie/product/4-x-aa-battery-holder-with-leads-and-switch/) |
-| AA Batteries (Rechargeable) | 4 | Pump power source | Tesco/Dunnes |
-| Jumper Wires (M/F, M/M) | 10+ | Connections | [The Pi Hut](https://thepihut.com/products/jumper-wires-pack-of-40) |
-| Breadboard | 1 | Prototyping | [Adaptuit](https://adaptuit.ie/product/breadboard-830-point/) |
-| Water Container | 1 | Water reservoir | Dealz/Poundland |
-| Tubing (3-4mm) | 0.5m | Water delivery | Aquarium/pet store |
-| Optional: Project Box | 1 | Enclosure | [RS Components](https://ie.rs-online.com/web/p/junction-boxes/7455289) |
+| Component | Quantity | Purpose |
+| --- | --- | --- |
+| Raspberry Pi 4 | 1 | Controls the Pump |
+| Laptop | 1 | Reads Sensor Data |
+| Capacitive Soil Sensor | 1 | Measures moisture |
+| 5V 1-Channel Relay | 1 | Controls water pump power |
+| Mini Submersible Pump | 1 | Water delivery |
+| 4x AA Battery Holder | 1 | Isolated pump power |
 
 ### Wiring Diagram
-```
-<img width="1034" height="710" alt="image" src="https://github.com/user-attachments/assets/e63fcf8e-1ee1-4ccf-ae62-60743b2d5158" />
+
+<img width="1034" height="710" alt="Wiring Diagram" src="https://github.com/user-attachments/assets/e63fcf8e-1ee1-4ccf-ae62-60743b2d5158" />
+
+## 🗄️ Database Design
+
+The system uses a MySQL database to manage users, track plant health, and log all automated actions.
+
+### Entity Relationship Diagram (ERD)
+
+<img width="803" height="697" alt="ERD" src="https://github.com/user-attachments/assets/141c2e0b-74af-4d6e-a7be-2b8368d08e12" />
+
+### SQL Setup Script
+
+This script creates the database and populates it with sample data so the UI works immediately upon setup.
+
+```sql
+CREATE DATABASE IF NOT EXISTS SmartIrrigation;
+USE SmartIrrigation;
+
+-- 1. Users table (Supports Google OAuth)
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('admin', 'technician', 'user') DEFAULT 'user',
+    google_id VARCHAR(255) NULL UNIQUE,
+    profile_picture TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Plants table (IoT Config)
+CREATE TABLE IF NOT EXISTS plants (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    location VARCHAR(100),
+    user_id INT,
+    hardware_id VARCHAR(50) UNIQUE,
+    moisture_threshold INT DEFAULT 30,
+    watering_duration INT DEFAULT 10,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 3. Moisture Readings
+CREATE TABLE IF NOT EXISTS moisture_readings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    plant_id INT,
+    moisture_level DECIMAL(5,2),
+    pump_status BOOLEAN DEFAULT FALSE,
+    is_automated BOOLEAN DEFAULT FALSE,
+    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (plant_id) REFERENCES plants(id) ON DELETE CASCADE
+);
+
+-- 4. Notifications
+CREATE TABLE IF NOT EXISTS user_notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    plant_id INT,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    event_type ENUM('low_moisture', 'auto_watering', 'manual_watering', 'threshold_update', 'system') DEFAULT 'system',
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (plant_id) REFERENCES plants(id) ON DELETE SET NULL
+);
+
+-- SEEDING DATA
+INSERT INTO users (username, email, password, first_name) VALUES ('admin_user', 'admin@example.com', 'hash123', 'Admin');
+INSERT INTO plants (name, location, user_id, hardware_id, moisture_threshold) VALUES ('Office Fern', 'Desk', 1, 'ESP32-01', 35);
 
 ```
 
-### Important Safety Notes
-
-⚠️ **CRITICAL SAFETY MEASURES:**
-1. **Always use relay** - Never connect pump directly to GPIO pins
-2. **Isolate power** - Use separate batteries for pump vs Raspberry Pi
-3. **Waterproof connections** if used outdoors
-4. **Test with water** in sink before connecting to plants
+---
 
 ## 📡 PubNub Setup
 
-### Step 1: Create PubNub Account
+1. **Create App**: Log in to [PubNub Dashboard](https://dashboard.pubnub.com/).
+2. **Enable Features**: Enable Presence, Stream Controller, and **PAM (Access Manager)**.
+3. **Channels**:
+* `plant-moisture-data`: Sensor updates.
+* `plant-pump-commands`: Control signals for the Raspberry Pi.
 
-1. Go to [PubNub Signup](https://dashboard.pubnub.com/signup)
-2. Sign up with email or GitHub
-3. Verify your email address
+---
 
-### Step 2: Create New App
-
-1. Login to [PubNub Dashboard](https://dashboard.pubnub.com/)
-2. Click "CREATE NEW APP"
-3. App Name: `Smart Plant Irrigation`
-4. Description: "IoT plant monitoring and control system"
-5. Click "CREATE"
-
-### Step 3: Get Your Keys
-
-1. Click on your new app
-2. Click "KEYSET" on the left sidebar
-3. Note these values:
-    Publish Key: pub-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    Subscribe Key: sub-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-    Secret Key: sec-c-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
-
-### Step 4: Configure Channels
-
-1. In your keyset, ensure these features are enabled:
-- ✅ Enable Presence
-- ✅ Enable Stream Controller
-- ✅ Enable PAM (Access Manager)
-
-2. Create two channels:
-- `plant-moisture-data` - For sensor readings (PUBLISH only from device)
-- `plant-pump-commands` - For control commands (SUBSCRIBE on device)
-
-### Step 5: Set Up PAM Security
-
-```bash
-# Install PubNub CLI (optional but useful)
-npm install -g pubnub-cli
-
-# Set up PAM rules (example using curl)
-curl -X POST "https://ps.pndsn.com/v2/auth/grant/sub-key/YOUR_SUB_KEY" \
--d "channel=plant-pump-commands" \
--d "auth=irrigation_device" \
--d "read=true" \
--d "write=false" \
--d "ttl=1440"
-```
 ## 🔧 Installation
 
-### 1. Clone Repository
-git clone https://github.com/YOUR_USERNAME/smart-plant-irrigation.git
+### 1. Clone & Environment
+
+```bash
+git clone https://github.com/Asystole-2/FloraVita.git
 cd smart-plant-irrigation
-
-### 2. Hardware Setup
-Follow the wiring diagram above to connect all components.
-
-### 3. Software Setup
-```
-## Update system
-sudo apt update && sudo apt upgrade -y
-
-## Install Python and tools
-sudo apt install python3-pip python3-venv git
-
-## Create virtual environment
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate
-
-## Install Python packages
-pip install pubnub RPi.GPIO python-dotenv
+pip install pubnub RPi.GPIO python-dotenv mysql-connector-python
 
 ```
-### 🔒 Security Features
-1. PubNub PAM (Access Manager)
-Device-specific auth keys
 
-Channel-level permissions
+### 2. Configure Secrets
 
-Time-limited access tokens
+Create a `.env` file:
 
-Revocable credentials
+```env
+PUBNUB_PUBLISH_KEY=your_pub_key
+PUBNUB_SUBSCRIBE_KEY=your_sub_key
+DB_HOST=localhost
+DB_USER=root
+DB_PASS=your_password
 
-2. Hardware Security
-Separate power supplies
-
-Relay isolation
-
-Fuse protection
-
-Waterproof enclosures
-
-3. Software Security
-Environment variables for secrets
-
-Input validation
-
-Command sanitization
-
-Regular security updates
-
-
-
-### 📈 Data Flow Architecture
 ```
 
-<img width="803" height="697" alt="Screenshot 2026-01-11 174119" src="https://github.com/user-attachments/assets/a86343ad-eea9-4514-b7ba-4d2e310674a5" />
+---
 
-  ```                                                                 
+## 🔒 Security Features
 
+* **PubNub PAM**: Only authorized auth-keys can send pump commands.
+* **Hardware Isolation**: The pump uses an external battery pack to prevent Raspberry Pi power surges.
+* **Environment Variables**: No hardcoded credentials in the source code.
 
-
-
+--- 
