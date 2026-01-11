@@ -28,6 +28,11 @@ An IoT-based smart irrigation system that monitors soil moisture and automatical
 
 The system uses a distributed architecture where the sensor and the actuator (pump) are managed by different hardware nodes communicating via PubNub.
 
+The IoT system is built around three key components. First, the IoT Nodes include a Sensor Node, which is a laptop interfaced with a capacitive soil moisture sensor. This node acts as the "Data Producer," sampling analog data, converting it to a digital percentage, and publishing it. Additionally, there is an Actuator Node, a Raspberry Pi interfaced with a 5V Relay and Submersible Pump. This node functions as the "Data Consumer," listening for specific commands to trigger its physical GPIO pins. Second, the Database, implemented in MySQL, serves as the "System of Record." It stores user credentials, historical moisture trends, and a detailed log of every pump activation for both auditing purposes and UI plant card(s). Third, the Web Server acts as the "Control Center," hosting the dashboard, authenticating users via Google OAuth, and interfacing with PubNub to send manual override commands
+
+Data Flow Architecture
+The data follows a circular path to ensure the user remains continuously in the loop. It begins with Sensing, where the laptop reads moisture data and publishes it to the moisture-data channel. Next, the Web Server and Database listen to this channel and save each record to MySQL. Then the Web Dashboard fetches the latest MySQL data to display updated UI cards. When a user initiates a Command by clicking "Start Pump", the Web Server publishes a JSON payload to the pump-commands channel. During Actuation, the Raspberry Pi receives this payload and switches the Relay ON, completing the cycle.
+
 <img width="1009" height="692" alt="System Arcgitecture" src="https://github.com/user-attachments/assets/ee96b1b3-b8ce-46cc-93e8-0be6f4b8fc7b" />
 
 1. **Input**: Capacitive Soil Moisture Sensor connected to the **Laptop** (via Arduino/Serial).
@@ -166,8 +171,21 @@ DB_PASS=your_password
 
 ## 🔒 Security Features
 
-* **PubNub PAM**: Only authorized auth-keys can send pump commands.
+* **Encryption**: Password hashing in the database.
+* * **SSL Certification**: Use of an encrypted and secure link between the web server and a browser.
 * **Hardware Isolation**: The pump uses an external battery pack to prevent Raspberry Pi power surges.
 * **Environment Variables**: No hardcoded credentials in the source code.
+* 
+Security Architecture: Data in Transit
+Data is considered "in transit" whenever it moves between IoT devices, the cloud, or the browser. To protect this data, several measures are implemented:
+ Transport Layer Security (TLS/SSL) is enforced, meaning all communication with PubNub and the Web Server is forced over HTTPS or secure WebSockets (WSS), preventing Man-in-the-Middle (MITM) attacks. Additionally, PubNub AES Encryption allows data payloads to be encrypted using AES-256 before leaving the device, ensuring that even intercepted packets appear as gibberish without the cipher key. Channel Segmentation is also used by splitting data into two separate channels—one for moisture-data and another for pump-commands—which ensures that a potential leak of sensor data does not grant an attacker the ability to control the hardware.
+
+Security Architecture: Data at Rest
+Data is "at rest" in this situation, which is data stored in the MySQL database. To secure this data, several practices are followed:
+Password Hashing ensures that user passwords are never stored in plain text. BCrypt was used with a unique salt for every user. Environment Variable Security was maintained by storing sensitive API keys—such as PubNub keys and database credentials—in a .env file, which is explicitly excluded from version control via .gitignore to prevent accidental exposure on platforms like GitHub
+
+Access Control
+Web & Database Access is protected through:
+SQL Injection Prevention by using Prepared Statements for all database interactions, which blocks attackers from injecting malicious SQL via the UI. Use of OAuth 2.0 integration with Google Login offloads the risk of credential theft to Google’s security infrastructure. 
 
 --- 
