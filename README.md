@@ -8,15 +8,13 @@ An IoT-based smart irrigation system that monitors soil moisture and automatical
 
 ## 📋 Table of Contents
 
-* [Features](https://www.google.com/search?q=%23-features)
-* [System Architecture](https://www.google.com/search?q=%23-system-architecture)
-* [Hardware Setup](https://www.google.com/search?q=%23-hardware-setup)
-* [Database Design](https://www.google.com/search?q=%23-database-design)
-* [PubNub Setup](https://www.google.com/search?q=%23-pubnub-setup)
-* [Installation](https://www.google.com/search?q=%23-installation)
-* [Security](https://www.google.com/search?q=%23-security-features)
-* [Data Flow](#-data-flow-architecture)
-
+* [Features](#-features)
+* [System Architecture](#-system-architecture)
+* [Hardware Setup](#-hardware-setup)
+* [Database Design](#-database-design)
+* [PubNub Setup](#-pubnub-setup)
+* [Installation](#-installation)
+* [Security Features](#-security-features)
 
 ## 🚀 Features
 
