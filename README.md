@@ -182,7 +182,7 @@ Data is considered "in transit" whenever it moves between IoT devices, the cloud
 
 Security Architecture: Data at Rest
 Data is "at rest" in this situation, which is data stored in the MySQL database. To secure this data, several practices are followed:
-Password Hashing ensures that user passwords are never stored in plain text. BCrypt was used with a unique salt for every user. Environment Variable Security was maintained by storing sensitive API keys—such as PubNub keys and database credentials—in a .env file, which is explicitly excluded from version control via .gitignore to prevent accidental exposure on platforms like GitHub
+Password Hashing ensures that user passwords are never stored in plain text. werkzeug  was used with a unique salt for every user. Environment Variable Security was maintained by storing sensitive API keys—such as PubNub keys and database credentials—in a .env file, which is explicitly excluded from version control via .gitignore to prevent accidental exposure on platforms like GitHub
 
 Access Control
 Web & Database Access is protected through:
