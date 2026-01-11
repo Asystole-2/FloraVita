@@ -172,10 +172,10 @@ DB_PASS=your_password
 ## 🔒 Security Features
 
 * **Encryption**: Password hashing in the database.
-* * **SSL Certification**: Use of an encrypted and secure link between the web server and a browser.
+* **SSL Certification**: Use of an encrypted and secure link between the web server and a browser.
 * **Hardware Isolation**: The pump uses an external battery pack to prevent Raspberry Pi power surges.
 * **Environment Variables**: No hardcoded credentials in the source code.
-* 
+ 
 Security Architecture: Data in Transit
 Data is considered "in transit" whenever it moves between IoT devices, the cloud, or the browser. To protect this data, several measures are implemented:
  Transport Layer Security (TLS/SSL) is enforced, meaning all communication with PubNub and the Web Server is forced over HTTPS or secure WebSockets (WSS), preventing Man-in-the-Middle (MITM) attacks. Additionally, PubNub AES Encryption allows data payloads to be encrypted using AES-256 before leaving the device, ensuring that even intercepted packets appear as gibberish without the cipher key. Channel Segmentation is also used by splitting data into two separate channels—one for moisture-data and another for pump-commands—which ensures that a potential leak of sensor data does not grant an attacker the ability to control the hardware.
